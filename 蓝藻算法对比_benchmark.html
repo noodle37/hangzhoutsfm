@@ -1,0 +1,568 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#f5f9fb" />
+  <meta name="description" content="梅城三江口蓝藻预测算法对比原型：Agent RSI 与 TSFM / LSTM / GRU / Transformer / CNN-LSTM 的 RMSE、MAE 及 30 天拟合对比。演示数据，非真实模型输出。" />
+  <title>算法对比 · 蓝藻智测 | Agent RSI vs 基线模型</title>
+  <!--
+    蓝藻预测算法对比 · 单文件设计原型（风格：字节 Seed 官网的留白与排版 + 本项目青绿/湖蓝/橙黄色板）
+    地区：浙江省建德市梅城镇三江口（新安江 + 兰江 → 富春江）
+    所有指标、曲线、预测值均为 UI 演示数据，不是真实模型输出。
+    地图：OpenStreetMap 底图，不可用时回退为离线水系示意图；站点标注为示意。
+  -->
+  <link rel="preconnect" href="https://unpkg.com" />
+  <link rel="preconnect" href="https://tile.openstreetmap.org" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    :root {
+      --bg: #f5f8fa; --surface: #ffffff; --text: #15243a; --muted: #71809a; --light: #9aa7b8;
+      --line: #e5ebf1;
+      --teal: #12a894; --teal-deep: #0b8f7c; --teal-soft: #e7f7f2;
+      --lake: #2e9be6; --lake-deep: #2478d4; --lake-soft: #eaf4fd;
+      --amber: #f0a63c; --amber-deep: #d98a25; --amber-soft: #fdf3e1;
+      --shadow: 0 14px 45px rgba(38,61,101,.05), 0 2px 12px rgba(38,61,101,.024);
+      --radius: 21px;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; color: var(--text); background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif; -webkit-font-smoothing: antialiased; }
+    button, select, input { font: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px solid rgba(46,155,230,.25); outline-offset: 3px; }
+    .shell { width: min(1600px, calc(100% - 68px)); margin: 0 auto; }
+    .topbar { height: 76px; position: sticky; top: 0; z-index: 3000; border-bottom: 1px solid rgba(219,226,235,.76); background: rgba(255,255,255,.88); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); }
+    .top-inner { height: 100%; display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+    .brand { display: flex; align-items: center; gap: 10px; flex: none; }
+    .brand-mark { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 12px; color: #fff; background: linear-gradient(140deg,#2fd0b4 0%, #12a894 42%, #2e9be6 100%); box-shadow: 0 6px 18px rgba(24,158,171,.2); }
+    .brand-cn { font-size: 19px; font-weight: 740; letter-spacing: -.7px; }
+    .brand-en { display: block; color: #94a0b1; font-size: 10px; font-weight: 600; letter-spacing: 1.8px; margin-top: 1px; }
+    .nav { display: flex; align-items: center; gap: 5px; padding: 5px; background: #f5f7fa; border: 1px solid #edf0f5; border-radius: 14px; }
+    .nav button { border: 0; background: transparent; color: #77849a; padding: 10px 18px; font-size: 13px; font-weight: 650; border-radius: 10px; transition: all .18s ease; white-space: nowrap; }
+    .nav button.active, .nav button:hover { background: #fff; box-shadow: 0 3px 10px rgba(27,49,81,.07); color: var(--lake-deep); }
+    .demo-pill { display: inline-flex; align-items: center; gap: 8px; padding: 8px 11px; border: 1px solid #efe4c8; color: #9c7a2c; background: #fffbf0; border-radius: 50px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+    .demo-pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--amber); }
+    .icon { display: inline-block; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; vertical-align: middle; }
+    .main { padding: 30px 0 42px; }
+
+    /* ---------- Seed 风格 Hero：大标题 + 大留白 + 胶囊元素 ---------- */
+    .hero { position: relative; border-radius: 26px; overflow: hidden; padding: 46px 44px 40px; background: linear-gradient(103deg, #e4f7f0 0%, #edf6fd 44%, #f8fafc 72%, #e6f2fb 100%); border: 1px solid #e3eef2; }
+    .hero::before { content: ""; width: 640px; height: 640px; position: absolute; top: -370px; right: 6%; border-radius: 50%; background: radial-gradient(circle, rgba(46,155,230,.14) 0, rgba(46,155,230,0) 68%); pointer-events: none; }
+    .hero::after { content: ""; width: 620px; height: 200px; position: absolute; right: -100px; bottom: -46px; background: radial-gradient(ellipse at 35% 45%, rgba(18,168,148,.12), transparent 53%), repeating-radial-gradient(ellipse at 70% 75%, transparent 0 24px, rgba(18,143,157,.07) 25px 26px, transparent 27px 40px); opacity: .8; transform: rotate(-8deg); pointer-events: none; }
+    .eyebrow { display: flex; align-items: center; gap: 8px; font-size: 10px; letter-spacing: 2px; font-weight: 770; color: #2b8f96; text-transform: uppercase; margin-bottom: 14px; }
+    .eyebrow::before { content: ""; width: 18px; height: 2px; border-radius: 2px; background: var(--teal); }
+    .hero h1 { font-weight: 800; letter-spacing: -1.6px; font-size: clamp(30px, 3.2vw, 44px); margin: 0 0 14px; color: #132c40; line-height: 1.24; }
+    .hero h1 em { font-style: normal; background: linear-gradient(100deg, var(--teal) 10%, var(--lake) 90%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .hero p { font-size: 13px; line-height: 1.85; color: #6c8093; margin: 0; max-width: 760px; }
+    .hero-meta { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 20px; }
+    .hero-meta span { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; font-size: 11px; font-weight: 650; border: 1px solid rgba(84,158,186,.18); border-radius: 50px; color: #47718a; background: rgba(255,255,255,.6); }
+    .hero-meta .dot { display: block; width: 6px; height: 6px; border-radius: 50%; background: var(--teal); padding: 0; border: 0; }
+    .hero-cta { display: flex; gap: 10px; margin-top: 26px; position: relative; z-index: 1; }
+    .btn-primary { border: 0; border-radius: 50px; padding: 13px 26px; font-size: 13px; font-weight: 750; color: #fff; background: linear-gradient(115deg, var(--teal) 0%, var(--lake) 100%); box-shadow: 0 10px 26px rgba(24,140,190,.24); transition: transform .16s ease, box-shadow .16s ease; }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 14px 30px rgba(24,140,190,.3); }
+    .btn-ghost { border: 1px solid #d7e6ee; border-radius: 50px; padding: 12px 22px; font-size: 13px; font-weight: 700; color: #3d6a86; background: rgba(255,255,255,.75); display: inline-flex; align-items: center; gap: 8px; }
+    .btn-ghost:hover { background: #fff; }
+    .hero-right { position: absolute; right: 44px; top: 46px; z-index: 1; text-align: right; }
+    .hero-right .best-tag { display: inline-flex; align-items: center; gap: 7px; font-size: 10px; font-weight: 750; letter-spacing: 1.4px; color: var(--amber-deep); background: rgba(255,251,240,.9); border: 1px solid #f1e3c2; padding: 6px 12px; border-radius: 50px; }
+    .hero-right .best-name { font-size: 34px; font-weight: 800; letter-spacing: -1.2px; margin-top: 10px; color: #10312e; }
+    .hero-right .best-sub { font-size: 11px; color: #8ba0ae; margin-top: 6px; font-variant-numeric: tabular-nums; }
+
+    .kpis { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 16px; margin-top: 18px; }
+    .card { background: rgba(255,255,255,.98); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); min-width: 0; }
+    .kpi { height: 117px; display: flex; justify-content: space-between; align-items: center; padding: 21px 23px; overflow: hidden; }
+    .kpi-label { display: flex; align-items: center; gap: 8px; color: #7f8b9c; font-size: 12px; font-weight: 650; white-space: nowrap; }
+    .kpi-main .value { font-size: 28px; font-weight: 780; letter-spacing: -1.3px; margin-top: 8px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+    .kpi-main .value small { font-size: 13px; font-weight: 720; letter-spacing: 0; margin-left: 4px; color: #8d9daf; }
+    .kpi-main .foot { font-size: 11px; color: #99a5b3; margin-top: 5px; white-space: nowrap; }
+    .kpi .kpi-icon { width: 51px; height: 51px; border-radius: 18px; display: grid; place-items: center; flex-shrink: 0; }
+    .kpi .kpi-icon .icon { width: 23px; height: 23px; stroke-width: 1.7; }
+    .kpi-best .value { color: var(--teal-deep); font-size: 23px; letter-spacing: -.6px; } .kpi-best .kpi-icon { background: var(--teal-soft); color: var(--teal); }
+    .kpi-r1 .value { color: var(--lake-deep); } .kpi-r1 .kpi-icon { background: var(--lake-soft); color: var(--lake); }
+    .kpi-r3 .value { color: #4b7bd6; } .kpi-r3 .kpi-icon { background: #eef2fd; color: #5b84e0; }
+    .kpi-gain .value { color: var(--amber-deep); } .kpi-gain .kpi-icon { background: var(--amber-soft); color: var(--amber); }
+
+    .section-row { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin: 30px 2px 15px; }
+    .section-row h2 { font-size: 18px; font-weight: 780; letter-spacing: -.5px; margin: 0; }
+    .section-row p { margin: 0; font-size: 12px; color: #a2adbb; }
+    .panel { overflow: hidden; }
+    .panel-head { min-height: 70px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 22px; border-bottom: 1px solid #edf0f4; flex-wrap: wrap; }
+    .panel-title { display: flex; align-items: center; gap: 9px; min-width: 0; }
+    .panel-title .h-icon { width: 29px; height: 29px; display: grid; place-items: center; color: var(--lake-deep); background: var(--lake-soft); border-radius: 9px; }
+    .panel-title h3 { font-size: 14px; font-weight: 760; white-space: nowrap; margin: 0; letter-spacing: -.2px; }
+    .panel-title p { font-size: 10px; color: #a3adba; margin: 4px 0 0; }
+    .head-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .segment { display: flex; gap: 2px; align-items: center; padding: 3px; border-radius: 9px; background: #f4f6fa; border: 1px solid #edf0f6; }
+    .segment button { border: 0; background: transparent; color: #8e9aab; border-radius: 7px; font-size: 11px; font-weight: 740; padding: 7px 12px; }
+    .segment button.active { color: var(--lake-deep); background: #fff; box-shadow: 0 2px 6px rgba(45,72,114,.09); }
+    .segment.teal button.active { color: var(--teal-deep); }
+
+    /* ---------- 指标对比：条形 + 表格 ---------- */
+    .metrics-grid { display: grid; grid-template-columns: minmax(0,1.18fr) minmax(0,1fr); gap: 18px; }
+    .bars-body { padding: 20px 24px 18px; }
+    .bar-row { display: grid; grid-template-columns: 128px 1fr 96px; align-items: center; gap: 12px; padding: 9px 0; }
+    .bar-name { font-size: 12.5px; font-weight: 720; color: #40566c; display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+    .mini-badge { font-size: 9px; font-weight: 780; color: var(--teal-deep); background: var(--teal-soft); border: 1px solid #cdebe2; padding: 2px 7px; border-radius: 50px; letter-spacing: .4px; }
+    .bar-track { position: relative; height: 22px; background: #f3f7fa; border-radius: 7px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 7px; background: linear-gradient(90deg, #b9d9f2, #9cc6ee); width: 0; transition: width .55s cubic-bezier(.22,.8,.3,1); }
+    .bar-row.best .bar-fill { background: linear-gradient(90deg, var(--teal) 0%, var(--lake) 100%); box-shadow: 0 3px 10px rgba(30,150,190,.25); }
+    .bar-row.best .bar-name { color: #10312e; }
+    .bar-val { font-size: 12.5px; font-weight: 780; color: #33465c; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+    .bar-val .delta { font-size: 10px; font-weight: 700; color: var(--amber-deep); margin-left: 5px; }
+    .bars-foot { padding: 12px 24px 16px; border-top: 1px solid #f1f4f7; font-size: 10.5px; color: #9aa8b6; display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+    .bars-caption { font-size: 11px; color: #8b9cae; margin-bottom: 12px; }
+    .bars-caption strong { color: var(--lake-deep); font-weight: 760; }
+    .table-wrap { padding: 8px 0 4px; overflow-x: auto; }
+    table.cmp { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+    table.cmp th { font-size: 10px; color: #93a1b0; font-weight: 700; text-align: right; padding: 10px 14px; border-bottom: 1px solid #edf1f5; white-space: nowrap; }
+    table.cmp th:first-child, table.cmp td:first-child { text-align: left; padding-left: 22px; }
+    table.cmp th small { display: block; font-weight: 600; color: #b3bdcb; font-size: 9px; margin-top: 2px; }
+    table.cmp td { font-size: 12.5px; font-weight: 650; color: #40506076; color: #3d4f63; text-align: right; padding: 11px 14px; border-bottom: 1px solid #f3f6f9; white-space: nowrap; }
+    table.cmp tr:last-child td { border-bottom: 0; }
+    table.cmp .m-name { font-weight: 760; color: #33465c; display: flex; align-items: center; gap: 7px; }
+    table.cmp tr.proposed td { background: linear-gradient(90deg, rgba(18,168,148,.07), rgba(46,155,230,.05)); }
+    table.cmp tr.proposed .m-name { color: var(--teal-deep); }
+    table.cmp td.best-val { color: var(--teal-deep); font-weight: 800; }
+    table.cmp td .d-amb { font-size: 10px; color: var(--amber-deep); font-weight: 740; }
+    .table-foot { padding: 12px 22px 15px; font-size: 10px; color: #a3aebb; border-top: 1px solid #f1f4f7; }
+
+    /* ---------- 30 天拟合 ---------- */
+    .fit-panel { margin-top: 0; }
+    .model-chips { display: flex; gap: 7px; flex-wrap: wrap; }
+    .model-chips button { border: 1px solid #e4eaf1; background: #fafcff; color: #74889b; font-size: 11px; font-weight: 720; padding: 8px 13px; border-radius: 50px; transition: all .15s; }
+    .model-chips button:hover { border-color: #bcd8ee; color: var(--lake-deep); }
+    .model-chips button.active { color: #fff; border-color: transparent; background: linear-gradient(115deg, #5b84e0, var(--lake)); box-shadow: 0 4px 12px rgba(46,155,230,.25); }
+    .model-chips button.active.proposed { background: linear-gradient(115deg, var(--teal), var(--lake)); }
+    .fit-body { padding: 18px 24px 16px; }
+    .legend-inline { display: flex; align-items: center; gap: 16px; color: #8698aa; font-size: 10.5px; margin-bottom: 10px; justify-content: flex-end; flex-wrap: wrap; }
+    .legend-inline span { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+    .line-key { width: 17px; height: 3px; border-radius: 9px; background: var(--teal); }
+    .line-key.pred { background: var(--lake); }
+    .band-key { width: 15px; height: 9px; border-radius: 3px; background: rgba(240,166,60,.25); }
+    .chart-wrap { height: 330px; position: relative; width: 100%; }
+    #fit-chart { width: 100%; height: 100%; display: block; overflow: visible; }
+    .chart-tooltip { position: absolute; z-index: 5; pointer-events: none; background: rgba(22,40,62,.95); color: #fff; padding: 9px 12px; border-radius: 10px; font-size: 11px; transform: translate(-50%,-112%); box-shadow: 0 5px 25px rgba(30,47,72,.18); white-space: nowrap; display: none; line-height: 1.6; }
+    .chart-tooltip em { font-style: normal; color: #7fd8c4; }
+    .chart-tooltip b { color: #9fd2ff; }
+    .chart-tooltip .err { color: #f6c97e; }
+    .fit-insights { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); margin: 4px 24px 20px; padding: 17px 0 2px; border-top: 1px solid #eff2f6; gap: 15px; }
+    .insight { border-right: 1px solid #eef1f5; }
+    .insight:last-child { border-right: 0; }
+    .insight .s-title { font-size: 10px; color: #9daaba; font-weight: 650; }
+    .insight .s-value { font-size: 21px; color: #1f3d55; font-weight: 780; letter-spacing: -.5px; margin: 8px 0 3px; font-variant-numeric: tabular-nums; }
+    .insight .s-value small { font-size: 11px; color: #92a4b3; font-weight: 680; }
+    .insight .s-foot { font-size: 10px; color: #99a9b8; }
+    .fit-note { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 24px 16px; color: #a1acbb; font-size: 10.5px; flex-wrap: wrap; }
+    .fit-note strong { color: var(--lake-deep); font-weight: 740; }
+
+    /* ---------- 未来预测卡片 ---------- */
+    .future-note { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 15px 22px; border: 1px solid #e7eef4; background: linear-gradient(100deg, #f2faf7, #eef6fd); border-radius: 16px; margin-bottom: 16px; font-size: 11.5px; color: #557084; }
+    .future-note strong { color: #1f4a5e; font-weight: 780; font-variant-numeric: tabular-nums; }
+    .future-note .sep { color: #c3d2dc; }
+    .future-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 16px; }
+    .f-card { padding: 19px 21px 16px; position: relative; transition: transform .16s ease, box-shadow .16s ease; }
+    .f-card:hover { transform: translateY(-2px); box-shadow: 0 18px 50px rgba(38,61,101,.09); }
+    .f-card.proposed { border: 1.5px solid transparent; background: linear-gradient(#fff,#fff) padding-box, linear-gradient(120deg, var(--teal), var(--lake)) border-box; }
+    .f-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .f-name { font-size: 14.5px; font-weight: 780; letter-spacing: -.3px; }
+    .f-tag { font-size: 9px; font-weight: 760; padding: 3px 8px; border-radius: 50px; background: #f2f6fa; color: #8a99a9; border: 1px solid #e7edf3; white-space: nowrap; }
+    .f-tag.proposed { color: var(--teal-deep); background: var(--teal-soft); border-color: #cdebe2; }
+    .f-rows { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+    .f-cell { background: #f8fbfd; border: 1px solid #edf2f6; border-radius: 13px; padding: 11px 13px 9px; }
+    .f-cell .lab { font-size: 10px; color: #93a2b1; font-weight: 700; }
+    .f-cell .val { font-size: 21px; font-weight: 800; letter-spacing: -.6px; margin-top: 6px; color: #22405a; font-variant-numeric: tabular-nums; }
+    .f-cell .val small { font-size: 10px; color: #9aabba; font-weight: 680; }
+    .f-cell .chg { font-size: 10px; font-weight: 740; margin-top: 3px; }
+    .chg.up { color: var(--amber-deep); } .chg.down { color: var(--teal-deep); } .chg.flat { color: #98a6b4; }
+    .f-card.proposed .f-cell .val { color: var(--teal-deep); }
+    .f-foot { display: flex; gap: 7px; margin-top: 13px; flex-wrap: wrap; }
+    .f-chip { font-size: 9.5px; font-weight: 700; color: #7c8ea0; background: #f4f7fa; border: 1px solid #e9eef3; border-radius: 50px; padding: 4px 9px; font-variant-numeric: tabular-nums; }
+    .f-card.proposed .f-chip { color: var(--lake-deep); background: var(--lake-soft); border-color: #d3e7f8; }
+
+    /* ---------- 地图 ---------- */
+    .map-body { position: relative; height: 430px; overflow: hidden; background: #e4f1eb; }
+    #leaflet-map, #offline-map { position: absolute; inset: 0; width: 100%; height: 100%; }
+    #leaflet-map { visibility: hidden; z-index: 4; }
+    #offline-map { display: block; z-index: 1; }
+    #offline-svg { width: 100%; height: 100%; display: block; transition: transform .25s ease; transform-origin: 52% 49%; }
+    .watermark { position: absolute; bottom: 9px; left: 11px; z-index: 12; font-size: 10px; color: rgba(36,69,82,.6); background: rgba(255,255,255,.72); padding: 4px 8px; border-radius: 6px; backdrop-filter: blur(4px); }
+    .map-float { position: absolute; z-index: 20; border: 1px solid rgba(230,236,239,.85); background: rgba(255,255,255,.93); backdrop-filter: blur(13px); box-shadow: 0 9px 23px rgba(29,71,86,.09); border-radius: 13px; }
+    .map-location { top: 14px; left: 14px; padding: 11px 13px; min-width: 159px; pointer-events: none; }
+    .map-location .a { font-weight: 770; font-size: 12px; display: flex; align-items: center; gap: 7px; }
+    .map-location .a span { width: 7px; height: 7px; background: var(--teal); border-radius: 50%; }
+    .map-location .b { font-size: 10px; color: #8da0ac; margin-top: 5px; }
+    .map-tools { right: 13px; top: 14px; display: flex; flex-direction: column; gap: 4px; padding: 5px; }
+    .map-tools button { border: 0; background: transparent; width: 29px; height: 29px; display: grid; place-items: center; color: #597185; border-radius: 8px; font-size: 18px; line-height: 1; }
+    .map-tools button:hover { background: #f0f5f8; }
+    .map-tools .split { height: 1px; background: #ecf0f2; margin: 2px 4px; }
+    .map-legend { right: 14px; bottom: 14px; padding: 10px 12px; min-width: 178px; pointer-events: none; }
+    .legend-title { font-weight: 750; color: #516477; font-size: 10px; margin-bottom: 7px; }
+    .colorbar { height: 7px; border-radius: 99px; background: linear-gradient(90deg, #2cc5a8 0%, #8fd8c8 30%, #7ec4ea 58%, #f0c060 82%, #f0a63c 100%); }
+    .legend-labels { display: flex; justify-content: space-between; margin-top: 6px; font-size: 9px; color: #9aabb6; }
+    .map-station-label { font-family: inherit; fill: #526e7b; font-size: 13px; font-weight: 740; paint-order: stroke; stroke: #fff; stroke-width: 4px; stroke-linejoin: round; }
+    .map-river-label { font-family: inherit; fill: #277b9a; font-weight: 750; font-size: 17px; letter-spacing: 6px; paint-order: stroke; stroke: #e5f6fb; stroke-width: 4px; }
+    .map-footer-note { padding: 13px 20px 15px; font-size: 10px; color: #a3b0bc; line-height: 1.6; border-top: 1px solid #f2f4f7; }
+
+    .leaflet-container { font-family: inherit; }
+    .leaflet-control-attribution { font-size: 9px !important; }
+    .leaflet-control-zoom { display: none; }
+    .leaflet-div-icon { background: transparent; border: 0; }
+    .live-marker { width: 17px; height: 17px; border-radius: 50%; background: #1e9cd6; border: 4px solid white; box-shadow: 0 0 0 2px #3aa8dd, 0 3px 14px #165b8270; }
+    .leaflet-tooltip { border: 1px solid #e7edf5; border-radius: 9px; box-shadow: 0 7px 25px rgba(44,61,91,.08); padding: 6px 9px; font-weight: 650; font-size: 11px; color: #3c6074; }
+    .toast { position: fixed; z-index: 5000; right: 28px; bottom: 28px; background: #17324d; color: #fff; border-radius: 11px; padding: 12px 16px; font-size: 12px; box-shadow: 0 8px 28px #1b345140; opacity: 0; pointer-events: none; transform: translateY(12px); transition: all .25s; max-width: 340px; line-height: 1.6; }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    footer { padding: 25px 6px 0; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; color: #9faab8; font-size: 10px; line-height: 1.6; }
+
+    @media(max-width:1220px) {
+      .shell { width: min(100% - 44px, 1600px); }
+      .metrics-grid { grid-template-columns: 1fr; }
+      .future-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    }
+    @media(max-width:920px) {
+      .kpis { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .nav { display: none; }
+      .hero-right { position: static; text-align: left; margin-top: 22px; }
+      .hero { padding: 32px 28px; }
+    }
+    @media(max-width:570px) {
+      .shell { width: calc(100% - 26px); }
+      .topbar { height: 68px; }
+      .brand-cn { font-size: 16px; } .brand-mark { width: 34px; height: 34px; }
+      .demo-pill { display: none; }
+      .main { padding-top: 16px; }
+      .hero h1 { font-size: 27px; }
+      .kpis { gap: 9px; margin-top: 11px; }
+      .kpi { height: 111px; padding: 15px; } .kpi-icon { display: none !important; } .kpi-main .value { font-size: 24px; }
+      .panel-head { padding: 8px 13px; }
+      .bar-row { grid-template-columns: 92px 1fr 74px; gap: 8px; }
+      .mini-badge { display: none; }
+      .chart-wrap { height: 260px; }
+      .fit-insights { grid-template-columns: 1fr; }
+      .insight { border-right: 0; border-bottom: 1px solid #eef1f5; padding-bottom: 10px; }
+      .future-grid { grid-template-columns: 1fr; }
+      .map-body { height: 340px; }
+      .key-panel { top: 56px; }
+    }
+    @media(prefers-reduced-motion:reduce) { *,*::before,*::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+  </style>
+</head>
+<body>
+  <svg xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">
+    <symbol id="ic-wave" viewBox="0 0 24 24"><path d="M2 9c3-2.7 5-2.7 8 0s5 2.7 8 0 3-2.7 4-2.5M2 16c3-2.7 5-2.7 8 0s5 2.7 8 0 3-2.7 4-2.5"/></symbol>
+    <symbol id="ic-chart" viewBox="0 0 24 24"><path d="M3 18 9 11l4 4 8-10"/><path d="M16 5h5v5"/></symbol>
+    <symbol id="ic-layers" viewBox="0 0 24 24"><path d="M12 3 2 8l10 5 10-5-10-5ZM2 12l10 5 10-5M2 16l10 5 10-5"/></symbol>
+    <symbol id="ic-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></symbol>
+    <symbol id="ic-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="ic-trophy" viewBox="0 0 24 24"><path d="M8 21h8m-4-4v4M7 4h10v5a5 5 0 0 1-10 0V4Z"/><path d="M7 6H4a2 2 0 0 0 2 4h1m10-4h3a2 2 0 0 1-2 2h-1"/></symbol>
+    <symbol id="ic-bars" viewBox="0 0 24 24"><path d="M4 20V10m6 10V4m6 16v-7m4 7H2"/></symbol>
+    <symbol id="ic-flask" viewBox="0 0 24 24"><path d="M9 3h6M10 3v5L4.5 18a2 2 0 0 0 1.8 3h11.4a2 2 0 0 0 1.8-3L14 8V3"/><path d="M7.5 14h9"/></symbol>
+    <symbol id="ic-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4.5"/><path d="m11.5 11.5 8-8M15 5l3 3m-6 0 2.5 2.5"/></symbol>
+    <symbol id="ic-download" viewBox="0 0 24 24"><path d="M12 3v12m-4-4 4 4 4-4M4 16v5h16v-5"/></symbol>
+    <symbol id="ic-pin" viewBox="0 0 24 24"><path d="M20 10c0 5.5-8 11-8 11S4 15.5 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></symbol>
+    <symbol id="ic-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5h.01"/></symbol>
+  </svg>
+
+  <header class="topbar">
+    <div class="shell top-inner">
+      <div class="brand" aria-label="蓝藻智测">
+        <span class="brand-mark"><svg class="icon" style="width:25px;height:25px;stroke-width:2.3"><use href="#ic-wave"/></svg></span>
+        <div><div class="brand-cn">蓝藻智测 <span style="font-size:10px;font-weight:650;color:#78a2a8;margin-left:5px">MODEL<span style="color:#3aa3b7">·</span>BENCHMARK</span></div><span class="brand-en">AQUATIC FORECASTING LAB</span></div>
+      </div>
+      <nav class="nav" aria-label="页面导航">
+        <button data-scroll="metrics" class="active">指标对比</button>
+        <button data-scroll="fit">拟合曲线</button>
+        <button data-scroll="future">未来预测</button>
+        <button data-scroll="map">研究区地图</button>
+      </nav>
+      <div class="top-actions"><span class="demo-pill" title="当前展示均为模拟数据">UI 原型 · 模拟数据</span></div>
+    </div>
+  </header>
+
+  <main class="main shell">
+    <!-- ================= Hero ================= -->
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="eyebrow">MODEL BENCHMARK · CHLOROPHYLL-A FORECAST</div>
+      <h1 id="hero-title">六种算法，<em>看清同一片水域。</em></h1>
+      <p>以梅城三江口核心断面的叶绿素 a 浓度为预测目标，在相同的数据划分与滚动验证流程下，对比 Agent RSI 与 TSFM、LSTM、GRU、Transformer、CNN-LSTM 五类基线模型在未来 1 天与未来 3 天任务上的预测精度。</p>
+      <div class="hero-meta">
+        <span><i class="dot"></i> 浙江 · 建德梅城三江口</span><span>对比模型 × 6</span><span>评估指标 RMSE / MAE</span><span>预测窗口 未来 1 天 · 未来 3 天</span><span>30 天滚动验证</span>
+      </div>
+      <div class="hero-cta">
+        <button class="btn-primary" id="ctaFit">查看 30 天拟合对比</button>
+        <button class="btn-ghost" id="exportBtn"><svg class="icon" style="width:15px;height:15px"><use href="#ic-download"/></svg>导出指标表 CSV</button>
+      </div>
+      <div class="hero-right">
+        <span class="best-tag"><svg class="icon" style="width:12px;height:12px"><use href="#ic-trophy"/></svg> 综合最优 · 本文方法</span>
+        <div class="best-name">Agent RSI</div>
+        <div class="best-sub">RMSE@1d 2.41 μg/L · 较最优基线 ↓18.9%</div>
+      </div>
+    </section>
+
+    <!-- ================= KPI ================= -->
+    <section class="kpis" aria-label="对比摘要">
+      <article class="card kpi kpi-best"><div class="kpi-main"><div class="kpi-label">综合最优模型</div><div class="value">Agent RSI</div><div class="foot">本文方法 · 智能体驱动的递归自我改进</div></div><span class="kpi-icon"><svg class="icon"><use href="#ic-trophy"/></svg></span></article>
+      <article class="card kpi kpi-r1"><div class="kpi-main"><div class="kpi-label">最优 RMSE · 未来 1 天</div><div class="value">2.41<small>μg/L</small></div><div class="foot">30 天滚动验证均值 · 演示</div></div><span class="kpi-icon"><svg class="icon"><use href="#ic-target"/></svg></span></article>
+      <article class="card kpi kpi-r3"><div class="kpi-main"><div class="kpi-label">RMSE · 未来 3 天</div><div class="value">4.18<small>μg/L</small></div><div class="foot">长窗口误差累计更缓 · 演示</div></div><span class="kpi-icon"><svg class="icon"><use href="#ic-clock"/></svg></span></article>
+      <article class="card kpi kpi-gain"><div class="kpi-main"><div class="kpi-label">较最优基线提升</div><div class="value">18.9<small>%</small></div><div class="foot">对比 TSFM · RMSE@未来1天</div></div><span class="kpi-icon"><svg class="icon"><use href="#ic-chart"/></svg></span></article>
+    </section>
+
+    <!-- ================= 指标对比 ================= -->
+    <div class="section-row" id="metrics"><h2>精度指标对比</h2><p>RMSE / MAE · 未来 1 天与未来 3 天 · 数值越小越好（演示数据）</p></div>
+    <section class="metrics-grid" aria-label="RMSE 与 MAE 对比">
+      <article class="card panel">
+        <div class="panel-head">
+          <div class="panel-title"><span class="h-icon"><svg class="icon"><use href="#ic-bars"/></svg></span><div><h3>误差条形对比</h3><p>按当前指标升序排列 · 越短越好</p></div></div>
+          <div class="head-controls">
+            <div class="segment" aria-label="指标切换"><button class="active" data-metric="rmse">RMSE</button><button data-metric="mae">MAE</button></div>
+            <div class="segment teal" aria-label="预测窗口"><button class="active" data-h="1">未来 1 天</button><button data-h="3">未来 3 天</button></div>
+          </div>
+        </div>
+        <div class="bars-body"><div class="bars-caption" id="barsCaption"></div><div id="barsWrap"></div></div>
+        <div class="bars-foot"><span>单位：μg/L · 叶绿素 a 浓度 · 三江口核心断面</span><span>橙色百分比为相对最优模型的误差增幅</span></div>
+      </article>
+      <article class="card panel">
+        <div class="panel-head">
+          <div class="panel-title"><span class="h-icon"><svg class="icon"><use href="#ic-flask"/></svg></span><div><h3>全指标一览</h3><p>同一验证协议下的四项指标</p></div></div>
+        </div>
+        <div class="table-wrap">
+          <table class="cmp" aria-label="六模型四项指标对比表">
+            <thead><tr><th>模型</th><th>RMSE<small>未来 1 天</small></th><th>MAE<small>未来 1 天</small></th><th>RMSE<small>未来 3 天</small></th><th>MAE<small>未来 3 天</small></th><th>ΔRMSE<small>相对最优</small></th></tr></thead>
+            <tbody id="metricsTbody"></tbody>
+          </table>
+        </div>
+        <div class="table-foot">演示数据用于界面设计验证；接入真实实验结果时替换 MODELS 常量即可。</div>
+      </article>
+    </section>
+
+    <!-- ================= 30 天拟合 ================= -->
+    <div class="section-row" id="fit"><h2>30 天真实值 vs 预测值</h2><p>2026.07.14 – 2026.08.12 · 滚动回测窗口 · 点击模型胶囊切换</p></div>
+    <section class="card panel fit-panel" aria-label="30 天拟合曲线">
+      <div class="panel-head">
+        <div class="panel-title"><span class="h-icon"><svg class="icon"><use href="#ic-chart"/></svg></span><div><h3>逐日拟合曲线</h3><p id="fitModelNote">Agent RSI · 未来 1 天预测任务</p></div></div>
+        <div class="head-controls">
+          <div class="model-chips" id="modelChips" aria-label="选择模型"></div>
+          <div class="segment teal" aria-label="预测任务"><button class="active" data-fh="1">未来 1 天</button><button data-fh="3">未来 3 天</button></div>
+        </div>
+      </div>
+      <div class="fit-body">
+        <div class="legend-inline"><span><i class="line-key"></i> 真实值（观测）</span><span><i class="line-key pred"></i> 模型预测值</span><span><i class="band-key"></i> 逐日偏差</span></div>
+        <div class="chart-wrap" id="chartWrap"><svg id="fit-chart" role="img" aria-label="30 天真实值与所选模型预测值的拟合对比图" viewBox="0 0 940 320" preserveAspectRatio="none"></svg><div class="chart-tooltip" id="chartTooltip"></div></div>
+      </div>
+      <div class="fit-insights" aria-label="当前模型在该窗口的误差摘要">
+        <div class="insight"><div class="s-title">窗口内 RMSE</div><div class="s-value" id="fitRmse">—</div><div class="s-foot">与上方指标表口径一致</div></div>
+        <div class="insight"><div class="s-title">窗口内 MAE</div><div class="s-value" id="fitMae">—</div><div class="s-foot">30 天逐日绝对误差均值</div></div>
+        <div class="insight"><div class="s-title">最大单日偏差</div><div class="s-value" id="fitMaxErr">—</div><div class="s-foot" id="fitMaxDate">—</div></div>
+      </div>
+      <div class="fit-note"><span>预测目标：<strong>叶绿素 a（μg/L）</strong> · 验证窗口 30 天 · 每日滚动一次</span><span>悬停或点击节点查看当日数值</span></div>
+    </section>
+
+    <!-- ================= 未来预测 ================= -->
+    <div class="section-row" id="future"><h2>未来预测结果</h2><p>基准日 2026.08.12 起报 · 未来 1 天 / 未来 3 天叶绿素 a 浓度（演示）</p></div>
+    <section aria-label="各模型未来预测结果">
+      <div class="future-note">
+        <span>预测基准日 <strong>2026.08.12</strong></span><span class="sep">|</span>
+        <span>当前观测 <strong>50.3 μg/L</strong></span><span class="sep">|</span>
+        <span>断面 <strong>三江口核心</strong></span><span class="sep">|</span>
+        <span style="color:#8fa1af">变化量为相对当前观测的差值；正值提示浓度上行风险，仅作演示。</span>
+      </div>
+      <div class="future-grid" id="futureGrid"></div>
+    </section>
+
+    <!-- ================= 研究区地图 ================= -->
+    <div class="section-row" id="map"><h2>研究区地图</h2><p>建德梅城三江口 · OpenStreetMap 底图 / 离线示意</p></div>
+    <section class="card panel" aria-label="研究区地图">
+      <div class="panel-head">
+        <div class="panel-title"><span class="h-icon"><svg class="icon"><use href="#ic-layers"/></svg></span><div><h3>三江口监测断面空间位置</h3><p>新安江 · 兰江 · 富春江 / 站点为示意点位</p></div></div>
+      </div>
+      <div class="map-body" id="mapContainer">
+        <!-- 离线水系示意图：流向结构符合梅城三江口地理事实，不代表测绘边界 -->
+        <div id="offline-map">
+          <svg id="offline-svg" viewBox="0 0 960 570" preserveAspectRatio="xMidYMid slice" role="img" aria-label="水系示意：新安江自西向东与自南向北流的兰江在梅城汇合，并向东北形成富春江">
+            <defs>
+              <linearGradient id="terra" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ecf2e9"/><stop offset=".49" stop-color="#e4efea"/><stop offset="1" stop-color="#f1f4e8"/></linearGradient>
+              <linearGradient id="water" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#b0dfdf"/><stop offset=".5" stop-color="#98d4de"/><stop offset="1" stop-color="#77c2d7"/></linearGradient>
+              <radialGradient id="heatTeal"><stop stop-color="#2cc5a8" stop-opacity=".6"/><stop offset=".5" stop-color="#7ec4ea" stop-opacity=".4"/><stop offset="1" stop-color="#7ec4ea" stop-opacity="0"/></radialGradient>
+              <radialGradient id="heatAmber"><stop stop-color="#f0a63c" stop-opacity=".62"/><stop offset=".55" stop-color="#f0c060" stop-opacity=".36"/><stop offset="1" stop-color="#2cc5a8" stop-opacity="0"/></radialGradient>
+              <filter id="softBlur"><feGaussianBlur stdDeviation="5"/></filter>
+              <mask id="riverMask"><rect x="0" y="0" width="960" height="570" fill="#000"/><path d="M-65 282C110 241 215 305 342 287S449 321 515 333" stroke="white" stroke-width="76" fill="none" stroke-linecap="round"/><path d="M360 628C368 540 412 483 423 432S458 361 515 333" stroke="white" stroke-width="78" fill="none" stroke-linecap="round"/><path d="M515 333C592 297 597 244 673 218S766 133 853 118S921 101 1020 41" stroke="white" stroke-width="90" fill="none" stroke-linecap="round"/></mask>
+            </defs>
+            <rect width="960" height="570" fill="url(#terra)"/>
+            <path d="M0 10 Q80 40 137 0 M-20 89 Q111 56 200 89T420 35T760 48T990 23 M-40 140 Q100 102 206 136T395 101T680 109T990 60 M-10 180 Q106 160 203 193T410 160T680 165T960 132 M-10 360 Q138 326 225 367T411 367T670 359T980 275 M-10 420 Q135 386 230 431T475 414T716 432T990 351 M-10 477 Q163 451 253 496T465 470T743 490T1000 408 M0 550 Q166 525 260 553T520 534T990 475" stroke="#b4d0c1" stroke-width="2.5" fill="none" opacity=".35"/>
+            <g fill="#d2e3d2" opacity=".55"><path d="M0 0h257q-44 80-131 109T0 118Z"/><path d="M726 0h234v231q-53-10-104-87T726 0Z"/><path d="M0 414q175-20 253 84l-66 72H0Z"/><path d="M677 450q86-74 283-72v192H761Z"/></g>
+            <g stroke="#c7d8c9" stroke-width="1.4" fill="none" opacity=".85"><path d="M38 25C112 90 105 129 168 156S237 233 309 209"/><path d="M22 47C89 106 96 156 146 185S227 267 285 252"/><path d="M782 15C739 58 758 80 806 102S897 197 932 211"/><path d="M849 18C824 64 839 93 875 118S948 171 970 190"/><path d="M38 450C105 462 143 517 161 576"/><path d="M69 437C153 458 171 497 194 570"/><path d="M697 545C721 500 777 470 860 479"/></g>
+            <g stroke="#fff" stroke-width="15" opacity=".65" fill="none"><path d="M-15 100Q122 155 233 176T480 125"/><path d="M114 570Q180 492 266 449T408 215"/><path d="M486 570Q527 460 689 433T1005 342"/></g>
+            <g stroke="#bfd3c7" stroke-width="3" opacity=".7" fill="none"><path d="M-15 100Q122 155 233 176T480 125"/><path d="M114 570Q180 492 266 449T408 215"/><path d="M486 570Q527 460 689 433T1005 342"/></g>
+            <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M-65 282C110 241 215 305 342 287S449 321 515 333" stroke="#f7fcfa" stroke-width="88"/><path d="M360 628C368 540 412 483 423 432S458 361 515 333" stroke="#f7fcfa" stroke-width="90"/><path d="M515 333C592 297 597 244 673 218S766 133 853 118S921 101 1020 41" stroke="#f7fcfa" stroke-width="102"/>
+              <path d="M-65 282C110 241 215 305 342 287S449 321 515 333" stroke="url(#water)" stroke-width="76"/><path d="M360 628C368 540 412 483 423 432S458 361 515 333" stroke="url(#water)" stroke-width="78"/><path d="M515 333C592 297 597 244 673 218S766 133 853 118S921 101 1020 41" stroke="url(#water)" stroke-width="90"/>
+            </g>
+            <g id="offlineHeat" mask="url(#riverMask)" filter="url(#softBlur)"><ellipse cx="531" cy="322" rx="170" ry="108" fill="url(#heatAmber)"/><ellipse cx="758" cy="166" rx="150" ry="98" fill="url(#heatTeal)"/><ellipse cx="421" cy="434" rx="112" ry="140" fill="url(#heatTeal)"/></g>
+            <text x="189" y="249" transform="rotate(6 189 249)" class="map-river-label">新安江</text><text x="319" y="478" transform="rotate(-62 319 478)" class="map-river-label">兰江</text><text x="743" y="115" transform="rotate(-33 743 115)" class="map-river-label">富春江</text>
+            <g font-size="13" fill="#839b9b" font-weight="700"><text x="460" y="157">梅城古镇</text><text x="192" y="113">杨村桥方向</text><text x="810" y="347">三都方向</text><text x="148" y="483">大洋方向</text></g>
+            <g transform="translate(558 322)"><rect x="-65" y="-42" width="126" height="31" rx="10" fill="#fff" opacity=".92"/><text x="-53" y="-22" fill="#3b6978" font-size="14" font-weight="760">梅城三江口</text><path d="M-8 -10 0 12 11-10" fill="#fff" opacity=".92"/></g>
+            <g transform="translate(55 521)" font-weight="700" fill="#7e9a9b" font-size="12"><path d="M0 14V-5M0-5l-7 10h14Z" fill="#6da69a"/><text x="-4" y="-12">N</text></g>
+          </svg>
+        </div>
+        <div id="leaflet-map" aria-label="联网地图：建德梅城三江口"></div>
+        <div class="map-float map-location"><div class="a"><span></span> 梅城 · 三江汇流区</div><div class="b">29.54°N · 119.50°E · 站点示意</div></div>
+        <div class="map-float map-tools" aria-label="地图控制"><button type="button" id="zoomIn" title="放大地图" aria-label="放大地图">+</button><button type="button" id="zoomOut" title="缩小地图" aria-label="缩小地图">−</button><div class="split"></div><button type="button" id="resetMap" title="回到梅城三江口" aria-label="回到梅城三江口"><svg class="icon" style="width:15px;height:15px"><use href="#ic-target"/></svg></button></div>
+        <div class="map-float map-legend"><div class="legend-title">蓝藻风险等级 · 模拟</div><div class="colorbar"></div><div class="legend-labels"><span>低</span><span>较低</span><span>中</span><span>较高</span><span>高</span></div></div>
+        <div class="watermark" id="mapMode">水系示意图 · 非测绘底图</div>
+      </div>
+      <div class="map-footer-note">底图为 OpenStreetMap（WGS84）；断面点位与风险色块均为示意。主平台的预测分布地图见预测页面。</div>
+    </section>
+
+    <footer><span>© 2026 AlgaeAI Research Prototype · 算法对比界面（演示）</span><span>免责声明：所有指标、曲线与预测值均为前端演示数据，不是真实模型输出，不用于实际决策。</span></footer>
+  </main>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    'use strict';
+    // ======================= 演示数据（接真实实验时替换此区块） =======================
+    const BASE_DATE = new Date('2026-08-12T12:00:00Z');
+    const OBS_NOW = 50.3; // 基准日观测值 μg/L
+    const MODELS = [
+      {id:'agent-rsi', name:'Agent RSI',  tag:'本文方法',   proposed:true,  rmse1:2.41, mae1:1.86, rmse3:4.18, mae3:3.27, lag:.12, seed:11, f1:51.4, f3:52.9},
+      {id:'tsfm',      name:'TSFM',       tag:'时序基础模型', proposed:false, rmse1:2.97, mae1:2.28, rmse3:5.12, mae3:3.98, lag:.20, seed:23, f1:50.8, f3:51.6},
+      {id:'lstm',      name:'LSTM',       tag:'循环网络基线', proposed:false, rmse1:4.06, mae1:3.15, rmse3:6.81, mae3:5.36, lag:.38, seed:37, f1:49.5, f3:47.8},
+      {id:'gru',       name:'GRU',        tag:'循环网络基线', proposed:false, rmse1:3.92, mae1:3.04, rmse3:6.55, mae3:5.12, lag:.34, seed:41, f1:49.9, f3:48.5},
+      {id:'transformer',name:'Transformer',tag:'注意力基线',  proposed:false, rmse1:3.38, mae1:2.62, rmse3:5.74, mae3:4.46, lag:.26, seed:53, f1:50.4, f3:50.9},
+      {id:'cnn-lstm',  name:'CNN-LSTM',   tag:'混合结构基线', proposed:false, rmse1:3.61, mae1:2.81, rmse3:6.12, mae3:4.79, lag:.30, seed:67, f1:50.1, f3:49.7}
+    ];
+    // 30 天观测序列（2026.07.14 – 08.12，叶绿素 a，μg/L，演示）
+    const TRUTH = [34.2,33.5,35.1,36.8,38.4,37.2,36.1,37.9,40.2,42.6,41.3,39.8,41.5,44.2,47.8,51.3,49.6,46.2,44.8,47.1,50.4,53.6,52.1,49.3,47.6,45.2,46.8,49.4,51.2,50.3];
+    const state = {metric:'rmse', horizon:1, fitModel:'agent-rsi', fitHorizon:1, leaflet:null, mapLoaded:false, offlineZoom:1};
+    const $ = id => document.getElementById(id);
+    function toast(msg){const el=$('toast');el.textContent=msg;el.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.classList.remove('show'),3200);}
+    function dayDate(offset){return new Date(BASE_DATE.getTime()+offset*86400000);}
+    function dateString(offset){const d=dayDate(offset);return String(d.getUTCMonth()+1).padStart(2,'0')+'/'+String(d.getUTCDate()).padStart(2,'0');}
+    function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+    // 生成确定性的演示预测序列：噪声+滞后倾向按目标 RMSE 归一化，保证窗口统计与指标表一致
+    function predictSeries(model,horizon){
+      const target=horizon===1?model.rmse1:model.rmse3, lag=model.lag*(horizon===1?1:2.1), rng=mulberry32(model.seed*7+horizon*131);
+      let prev=0;
+      const raw=TRUTH.map((v,i)=>{const n=(rng()*2-1)*.62+prev*.35;prev=n;const lagErr=i>0?(TRUTH[i-1]-v)*lag:0;return n+lagErr;});
+      const rmseRaw=Math.sqrt(raw.reduce((s,e)=>s+e*e,0)/raw.length)||1,k=target/rmseRaw;
+      return TRUTH.map((v,i)=>+(v+raw[i]*k).toFixed(1));
+    }
+    function errStats(pred){let se=0,ae=0,maxE=0,maxI=0;pred.forEach((p,i)=>{const e=p-TRUTH[i];se+=e*e;ae+=Math.abs(e);if(Math.abs(e)>maxE){maxE=Math.abs(e);maxI=i;}});return {rmse:Math.sqrt(se/pred.length),mae:ae/pred.length,maxE,maxI};}
+
+    // ======================= 指标条形图 =======================
+    function renderBars(){
+      const key=state.metric+state.horizon, unit='μg/L';
+      const rows=[...MODELS].sort((a,b)=>a[key]-b[key]);
+      const max=rows[rows.length-1][key]*1.1, best=rows[0][key];
+      $('barsCaption').innerHTML=`当前指标：<strong>${state.metric.toUpperCase()} · 未来 ${state.horizon} 天</strong> · 最优 <strong>${best.toFixed(2)} ${unit}</strong>`;
+      $('barsWrap').innerHTML=rows.map(m=>{
+        const pct=(m[key]/max*100).toFixed(1), delta=m.proposed?'':`<span class="delta">+${(((m[key]-best)/best)*100).toFixed(1)}%</span>`;
+        return `<div class="bar-row ${m.proposed?'best':''}"><div class="bar-name">${m.name}${m.proposed?'<span class="mini-badge">本文方法</span>':''}</div><div class="bar-track"><div class="bar-fill" data-w="${pct}"></div></div><div class="bar-val">${m[key].toFixed(2)}${delta}</div></div>`;
+      }).join('');
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{document.querySelectorAll('.bar-fill').forEach(el=>el.style.width=el.dataset.w+'%');}));
+    }
+    function renderTable(){
+      const best=Math.min(...MODELS.map(m=>m.rmse1));
+      $('metricsTbody').innerHTML=MODELS.map(m=>{
+        const d=((m.rmse1-best)/best*100);
+        return `<tr class="${m.proposed?'proposed':''}"><td><span class="m-name">${m.name}${m.proposed?'<span class="mini-badge">本文方法</span>':''}</span></td><td class="${m.rmse1===best?'best-val':''}">${m.rmse1.toFixed(2)}</td><td>${m.mae1.toFixed(2)}</td><td>${m.rmse3.toFixed(2)}</td><td>${m.mae3.toFixed(2)}</td><td>${m.proposed?'<span style="color:var(--teal-deep);font-weight:800">最优</span>':`<span class="d-amb">+${d.toFixed(1)}%</span>`}</td></tr>`;
+      }).join('');
+    }
+
+    // ======================= 30 天拟合图 =======================
+    function renderFit(){
+      const model=MODELS.find(m=>m.id===state.fitModel), pred=predictSeries(model,state.fitHorizon), st=errStats(pred);
+      $('fitModelNote').textContent=`${model.name} · 未来 ${state.fitHorizon} 天预测任务 · 演示`;
+      $('fitRmse').innerHTML=st.rmse.toFixed(2)+' <small>μg/L</small>';
+      $('fitMae').innerHTML=st.mae.toFixed(2)+' <small>μg/L</small>';
+      $('fitMaxErr').innerHTML=st.maxE.toFixed(1)+' <small>μg/L</small>';
+      $('fitMaxDate').textContent=dateString(st.maxI-29)+' · 演示偏差';
+      const svg=$('fit-chart'),W=940,H=320,pad={l:46,r:14,t:24,b:40},x0=pad.l,x1=W-pad.r,y0=pad.t,y1=H-pad.b;
+      const all=TRUTH.concat(pred),lo=Math.floor(Math.min(...all)-2),hi=Math.ceil(Math.max(...all)+2);
+      const n=TRUTH.length,nx=i=>x0+i*(x1-x0)/(n-1),ny=v=>y1-(v-lo)/(hi-lo)*(y1-y0);
+      const pts=xs=>xs.map(v=>v.map(z=>Number(z).toFixed(2)).join(',')).join(' ');
+      let marks='';
+      for(let i=0;i<=4;i++){const val=lo+(hi-lo)*i/4,y=ny(val);marks+=`<line x1="${x0}" y1="${y}" x2="${x1}" y2="${y}" stroke="#eaf0f5" stroke-width="1"/><text x="${x0-10}" y="${y+4}" fill="#9daabb" font-size="11" text-anchor="end">${Math.round(val)}</text>`;}
+      for(let i=0;i<n;i++){if(i%5!==0&&i!==n-1)continue;marks+=`<text x="${nx(i)}" y="${y1+24}" text-anchor="middle" fill="${i===n-1?'#0b8f7c':'#a4afbd'}" font-size="10.5" font-weight="${i===n-1?750:500}">${dateString(i-29)}</text>`;}
+      const tPts=TRUTH.map((v,i)=>[nx(i),ny(v)]),pPts=pred.map((v,i)=>[nx(i),ny(v)]);
+      const band=[...tPts,...pPts.slice().reverse()];
+      const dots=TRUTH.map((v,i)=>`<circle class="fit-dot" data-index="${i}" cx="${nx(i)}" cy="${ny(v)}" r="9" fill="transparent" style="cursor:crosshair;pointer-events:all"/><circle cx="${nx(i)}" cy="${ny(v)}" r="2.6" fill="#fff" stroke="#12a894" stroke-width="2" pointer-events="none"/><circle cx="${nx(i)}" cy="${ny(pred[i])}" r="2.6" fill="#fff" stroke="#2e9be6" stroke-width="2" pointer-events="none"/>`).join('');
+      svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+      svg.innerHTML=`<defs><linearGradient id="truthArea" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#2cc5a8" stop-opacity=".14"/><stop offset="1" stop-color="#bff5e8" stop-opacity="0"/></linearGradient></defs>
+      ${marks}
+      <line x1="${x0}" y1="${y1}" x2="${x1}" y2="${y1}" stroke="#cbd6e2" stroke-width="1"/>
+      <polygon points="${pts(band)}" fill="rgba(240,166,60,.13)"/>
+      <polygon points="${pts([[nx(0),y1],...tPts,[nx(n-1),y1]])}" fill="url(#truthArea)"/>
+      <polyline points="${pts(pPts)}" fill="none" stroke="#2e9be6" stroke-width="2.4" stroke-dasharray="6 5" stroke-linecap="round" stroke-linejoin="round"/>
+      <polyline points="${pts(tPts)}" fill="none" stroke="#12a894" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"/>
+      ${dots}`;
+      svg.querySelectorAll('.fit-dot').forEach(dot=>{const i=Number(dot.dataset.index);
+        const show=()=>{const tip=$('chartTooltip'),rect=$('chartWrap').getBoundingClientRect();
+          const cx=nx(i)/W*rect.width,cy=ny(Math.min(TRUTH[i],pred[i]))/H*rect.height;
+          const e=pred[i]-TRUTH[i];
+          tip.innerHTML=`${dateString(i-29)}<br><em>真实 ${TRUTH[i].toFixed(1)}</em> · <b>预测 ${pred[i].toFixed(1)}</b><br><span class="err">偏差 ${e>=0?'+':''}${e.toFixed(1)} μg/L</span>`;
+          tip.style.left=Math.max(80,Math.min(rect.width-80,cx))+'px';tip.style.top=Math.max(52,cy)+'px';tip.style.display='block';};
+        dot.addEventListener('mouseenter',show);dot.addEventListener('click',show);dot.addEventListener('mouseleave',()=>$('chartTooltip').style.display='none');});
+    }
+    function renderChips(){
+      $('modelChips').innerHTML=MODELS.map(m=>`<button data-id="${m.id}" class="${m.id===state.fitModel?'active':''} ${m.proposed?'proposed':''}">${m.name}</button>`).join('');
+      $('modelChips').querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{state.fitModel=b.dataset.id;renderChips();renderFit();}));
+    }
+
+    // ======================= 未来预测卡片 =======================
+    function renderFuture(){
+      $('futureGrid').innerHTML=MODELS.map(m=>{
+        const cell=(lab,val)=>{const d=val-OBS_NOW,cls=Math.abs(d)<.3?'flat':d>0?'up':'down',arrow=cls==='flat'?'≈':d>0?'↑':'↓';
+          return `<div class="f-cell"><div class="lab">${lab}</div><div class="val">${val.toFixed(1)} <small>μg/L</small></div><div class="chg ${cls}">${arrow} ${Math.abs(d).toFixed(1)} vs 观测</div></div>`;};
+        return `<article class="card f-card ${m.proposed?'proposed':''}">
+          <div class="f-head"><span class="f-name">${m.name}</span><span class="f-tag ${m.proposed?'proposed':''}">${m.tag}</span></div>
+          <div class="f-rows">${cell('未来 1 天预测',m.f1)}${cell('未来 3 天预测',m.f3)}</div>
+          <div class="f-foot"><span class="f-chip">RMSE@1d ${m.rmse1.toFixed(2)}</span><span class="f-chip">RMSE@3d ${m.rmse3.toFixed(2)}</span><span class="f-chip">MAE@1d ${m.mae1.toFixed(2)}</span></div>
+        </article>`;
+      }).join('');
+    }
+
+    // ======================= 地图：OSM 底图 / 离线示意（研究区位置展示） =======================
+    const STATIONS=[
+      {name:'新安江来水',lat:29.5444,lng:119.4700},{name:'兰江入汇',lat:29.5080,lng:119.5078},
+      {name:'三江口核心',lat:29.5378,lng:119.5008},{name:'富春江下游',lat:29.5515,lng:119.5405}
+    ];
+    function initLeaflet(){
+      if(!window.L)return;
+      try{
+        const map=L.map('leaflet-map',{zoomControl:false,attributionControl:true,preferCanvas:true,scrollWheelZoom:false}).setView([29.5378,119.5008],13);
+        state.leaflet=map;
+        STATIONS.forEach(s=>{L.marker([s.lat,s.lng],{icon:L.divIcon({className:'',html:'<div class="live-marker"></div>',iconSize:[17,17],iconAnchor:[8,8]})}).addTo(map).bindTooltip(s.name+' · 示意点位',{direction:'top'});});
+        [{lat:29.5378,lng:119.5008,c:'#f0a63c',r:1600},{lat:29.5468,lng:119.5245,c:'#2cc5a8',r:1400},{lat:29.5225,lng:119.5052,c:'#7ec4ea',r:1400}].forEach(p=>{L.circle([p.lat,p.lng],{radius:p.r,stroke:false,fillColor:p.c,fillOpacity:.13,interactive:false}).addTo(map);});
+        const tile=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:18,minZoom:9});
+        tile.on('tileload',()=>{if(state.mapLoaded)return;state.mapLoaded=true;$('leaflet-map').style.visibility='visible';$('mapMode').textContent='OpenStreetMap 地理底图 · 站点为示意';map.invalidateSize();});
+        tile.on('tileerror',()=>{if(!state.mapLoaded)$('mapMode').textContent='水系离线示意图 · 地图瓦片暂不可用';});
+        tile.addTo(map);
+      }catch(err){console.warn('Leaflet 初始化未完成，继续使用离线水系示意图。',err);}
+    }
+
+    // ======================= 交互与导出 =======================
+    function downloadCSV(){
+      const lines=[['model','tag','rmse_d1','mae_d1','rmse_d3','mae_d3','future_d1','future_d3','is_demo'].join(',')];
+      MODELS.forEach(m=>lines.push([m.name,m.tag,m.rmse1,m.mae1,m.rmse3,m.mae3,m.f1,m.f3,true].join(',')));
+      const csv='﻿'+lines.join('\r\n'),blob=new Blob([csv],{type:'text/csv;charset=utf-8;'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+      a.href=url;a.download='Sanjiangkou_Model_Benchmark_DEMO.csv';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),600);
+      toast('已导出指标对比表 CSV（演示数据）');
+    }
+    function setup(){
+      renderTable();renderBars();renderChips();renderFit();renderFuture();
+      document.querySelectorAll('[data-metric]').forEach(b=>b.addEventListener('click',()=>{state.metric=b.dataset.metric;document.querySelectorAll('[data-metric]').forEach(x=>x.classList.toggle('active',x===b));renderBars();}));
+      document.querySelectorAll('[data-h]').forEach(b=>b.addEventListener('click',()=>{state.horizon=Number(b.dataset.h);document.querySelectorAll('[data-h]').forEach(x=>x.classList.toggle('active',x===b));renderBars();}));
+      document.querySelectorAll('[data-fh]').forEach(b=>b.addEventListener('click',()=>{state.fitHorizon=Number(b.dataset.fh);document.querySelectorAll('[data-fh]').forEach(x=>x.classList.toggle('active',x===b));renderFit();}));
+      $('zoomIn').addEventListener('click',()=>{if(state.mapLoaded)state.leaflet.setZoom(state.leaflet.getZoom()+1);else{state.offlineZoom=Math.min(1.8,state.offlineZoom+.18);$('offline-svg').style.transform=`scale(${state.offlineZoom})`;}});
+      $('zoomOut').addEventListener('click',()=>{if(state.mapLoaded)state.leaflet.setZoom(state.leaflet.getZoom()-1);else{state.offlineZoom=Math.max(1,state.offlineZoom-.18);$('offline-svg').style.transform=`scale(${state.offlineZoom})`;}});
+      $('resetMap').addEventListener('click',()=>{state.offlineZoom=1;$('offline-svg').style.transform='scale(1)';if(state.mapLoaded)state.leaflet.setView([29.5378,119.5008],13);toast('已定位至梅城三江口附近');});
+      $('exportBtn').addEventListener('click',downloadCSV);
+      $('ctaFit').addEventListener('click',()=>{document.getElementById('fit').scrollIntoView({behavior:'smooth',block:'start'});});
+      document.querySelectorAll('.nav [data-scroll]').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b===btn));$(btn.dataset.scroll).scrollIntoView({behavior:'smooth',block:'start'});}));
+      setTimeout(initLeaflet,10);
+      window.addEventListener('resize',()=>{if(state.mapLoaded)state.leaflet.invalidateSize();});
+    }
+    document.addEventListener('DOMContentLoaded',setup);
+  </script>
+</body>
+</html>

@@ -1,0 +1,668 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#f7f9fc" />
+  <meta name="description" content="梅城三江口蓝藻风险预测平台交互原型。研究演示数据，非真实水质监测或风险预报。" />
+  <title>蓝藻智测 · 梅城三江口预测平台 | 前端设计原型</title>
+  <!--
+    蓝藻预测 Web UI · 交付学生的单文件设计原型
+    地区：浙江省建德市梅城镇三江口（新安江 + 兰江 → 富春江）
+    所有风险值、站点位置、曲线、热力范围均为 UI 演示数据，不是实测/正式模型输出。
+    单文件可离线打开；联网时在脚本顶部 TDT_KEY 常量填入天地图浏览器端 Key，即通过 Leaflet + 天地图 WMTS 显示卫星/标准真实底图。
+    蓝藻预测图层按真实河道中线（CHANNELS）逐像素生成，与底图坐标对齐；站点弹窗、预测时刻滑杆（0–7 天）联动。
+    后续接入真实数据时，重点替换：DEMO / STATIONS / HOTSPOTS / data-loader。
+  -->
+  <link rel="preconnect" href="https://unpkg.com" />
+  <link rel="preconnect" href="https://tile.openstreetmap.org" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    :root {
+      --bg: #f6f8fb; --surface: #ffffff; --surface-alt: #fbfcff;
+      --text: #17243b; --muted: #718097; --light: #9ea9ba;
+      --line: #e6ebf1; --blue: #397af4; --blue-deep: #2465dc;
+      --teal: #20ad9e; --cyan: #58bada; --green: #14a576;
+      --amber: #e9a13b; --red: #e86558;
+      --shadow: 0 14px 45px rgba(38,61,101,.045), 0 2px 12px rgba(38,61,101,.023);
+      --radius: 21px;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; color: var(--text); background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif; -webkit-font-smoothing: antialiased; }
+    button, select, input { font: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px solid rgba(56,122,244,.23); outline-offset: 3px; }
+    a { color: inherit; text-decoration: none; }
+    .shell { width: min(1600px, calc(100% - 68px)); margin: 0 auto; }
+    .topbar { height: 76px; position: sticky; top: 0; z-index: 3000; border-bottom: 1px solid rgba(219,226,235,.76); background: rgba(255,255,255,.88); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); }
+    .top-inner { height: 100%; display:flex; align-items:center; justify-content:space-between; gap: 18px; }
+    .brand { display:flex; align-items:center; gap: 10px; flex: none; }
+    .brand-mark { width: 38px; height:38px; display:grid; place-items:center; border-radius: 12px; color: white; background: linear-gradient(140deg,#3ac8c0 0%, #20b49f 40%, #4b8cf9 100%); box-shadow: 0 6px 18px rgba(39,151,191,.18); }
+    .brand-cn { font-size:19px; font-weight: 740; letter-spacing: -.7px; }
+    .brand-en { display:block; color:#94a0b1; font-size:10px; font-weight:600; letter-spacing:1.8px; margin-top: 1px; }
+    .nav { display:flex; align-items:center; gap: 5px; padding: 5px; background:#f5f7fa; border:1px solid #edf0f5; border-radius: 14px; }
+    .nav button { border:0; background:transparent; color:#77849a; padding:10px 18px; font-size:13px; font-weight:650; border-radius: 10px; transition:all .18s ease; white-space:nowrap; }
+    .nav button.active, .nav button:hover { background:#fff; box-shadow:0 3px 10px rgba(27,49,81,.07); color:#1e69dc; }
+    .top-actions { display:flex; align-items:center; gap: 10px; }
+    .demo-pill { display:inline-flex; align-items:center; gap:8px; padding:8px 11px; border:1px solid #e9e4cf; color:#9c7a2c; background:#fffbf0; border-radius:50px; font-size:11px; font-weight:700; white-space:nowrap; }
+    .demo-pill::before {content:""; width:7px; height:7px; border-radius:50%; background:#e6ab4a;}
+    .icon-btn { width: 38px; height:38px; display:grid; place-items:center; color:#62738a; border:1px solid var(--line); border-radius:12px; background:#fff; }
+    .icon { display:inline-block; width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; flex-shrink:0; vertical-align:middle; }
+    .main { padding: 30px 0 42px; }
+    .hero { position:relative; border-radius: 25px; overflow:hidden; min-height: 181px; padding: 30px 34px 29px; background: linear-gradient(103deg, #e9f4fb 0%, #f2f9ff 38%, #f7fafc 72%, #e2f2f0 100%); border: 1px solid #e5eef4; }
+    .hero::before { content:""; width:620px; height:620px; position:absolute; top:-360px; right:10%; border-radius:50%; background:radial-gradient(circle, rgba(90,171,231,.15) 0, rgba(90,171,231,0) 68%); pointer-events:none; }
+    .hero::after { content:""; width: 610px; height:190px; position:absolute; right:-95px; bottom:-42px; background: radial-gradient(ellipse at 35% 45%,rgba(79,178,184,.1),transparent 53%),repeating-radial-gradient(ellipse at 70% 75%,transparent 0 24px,rgba(54,163,187,.072) 25px 26px,transparent 27px 40px); opacity:.8; transform:rotate(-8deg); pointer-events:none; }
+    .eyebrow { display:flex; align-items:center; gap:8px; font-size:10px; letter-spacing: 2px; font-weight:770; color:#388f9e; text-transform:uppercase; margin-bottom:12px; }
+    .eyebrow::before { content:""; width:18px; height:2px; border-radius:2px; background:#31b39d; }
+    .hero h1 {font-weight:780; letter-spacing:-1.3px; font-size:clamp(27px,2.6vw,36px); margin:0 0 12px; color:#18324a; line-height:1.3;}
+    .hero p {font-size:13px; line-height:1.8; color:#6f8494; margin:0; max-width:740px; }
+    .hero-meta { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:17px; }
+    .hero-meta span { display:inline-flex; align-items:center; gap:6px; padding:6px 11px; font-size:11px; font-weight:600; border:1px solid rgba(89,159,187,.16); border-radius:8px; color:#4f7e93; background:rgba(255,255,255,.55); }
+    .hero-meta .dot {display:block; width:6px; height:6px; border-radius:50%; background:#27aa9b; padding:0; border:0;}
+    .hero-right { position:absolute; right:36px; top:34px; z-index:1; display:flex; flex-direction:column; align-items:flex-end; gap:7px; }
+    .hero-right .region {font-size:12px; color:#668699; font-weight:670; }
+    .hero-right .coords {font-size:11px; color:#9bb0be; font-variant-numeric:tabular-nums; letter-spacing:.6px;}
+    .kpis { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; margin-top:18px; }
+    .card { background:rgba(255,255,255,.98); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); min-width:0; }
+    .kpi { height:117px; display:flex; justify-content:space-between; align-items:center; padding:21px 23px; overflow:hidden; }
+    .kpi-main { min-width:0; }
+    .kpi-label { display:flex; align-items:center; gap:8px; color:#7f8b9c; font-size:12px; font-weight:650; white-space:nowrap; }
+    .kpi-main .value {font-size:28px; font-weight:780; letter-spacing:-1.3px; margin-top:8px; line-height:1.1;}
+    .kpi-main .value small {font-size:13px; font-weight:720; letter-spacing:0; margin-left:4px; color:#8d9daf;}
+    .kpi-main .foot {font-size:11px; color:#99a5b3; margin-top:5px; white-space:nowrap; }
+    .kpi .kpi-icon {width:51px; height:51px; border-radius:18px; display:grid; place-items:center; flex-shrink:0;}
+    .kpi .kpi-icon .icon {width:23px;height:23px;stroke-width:1.7;}
+    .kpi-risk .value {color:#e99b38;} .kpi-risk .kpi-icon {background:#fff6e8;color:#e6a24c;}
+    .kpi-trend .value {color:#dc8b47;} .kpi-trend .kpi-icon {background:#fff4e9;color:#df964e;}
+    .kpi-point .value {color:#2c78e4;} .kpi-point .kpi-icon {background:#eef5ff;color:#4b8be9;}
+    .kpi-horizon .value {color:#12a78f;} .kpi-horizon .kpi-icon {background:#e9faf4;color:#19a58c;}
+    .section-row {display:flex; align-items:baseline; justify-content:space-between; gap:16px; margin:27px 2px 15px; }
+    .section-row h2 { font-size:17px; font-weight:750; letter-spacing:-.4px; margin:0; }
+    .section-row p { margin:0; font-size:12px; color:#a2adbb; }
+    .main-grid {display:grid; grid-template-columns:minmax(0,1.23fr) minmax(0,1fr); gap:18px;}
+    .panel { overflow:hidden; }
+    .panel-head {height:70px; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:0 22px; border-bottom:1px solid #edf0f4; }
+    .panel-title {display:flex; align-items:center; gap:9px; min-width:0;}
+    .panel-title .h-icon { width:29px; height:29px; display:grid; place-items:center; color:#347ceb; background:#ecf4ff; border-radius:9px; }
+    .panel-title h3 {font-size:14px; font-weight:760; white-space:nowrap; margin:0; letter-spacing:-.2px; }
+    .panel-title p {font-size:10px; color:#a3adba; margin:4px 0 0; }
+    .head-controls {display:flex; align-items:center; gap:7px; }
+    .soft-select { appearance:none; -webkit-appearance:none; border:1px solid #e6ebf1; color:#536780; background:#fafbfd; border-radius:9px; padding:9px 30px 9px 11px; outline:0; font-size:11px; font-weight:670; min-width:99px; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7' viewBox='0 0 10 7'%3E%3Cpath d='M1 1.5 5 5.5 9 1.5' stroke='%237B8C9D' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 11px center;}
+    .segment {display:flex; gap:2px; align-items:center; padding:3px; border-radius:9px; background:#f4f6fa; border:1px solid #edf0f6; }
+    .segment button {border:0; background:transparent; color:#8e9aab; border-radius:7px; font-size:11px; font-weight:740; padding:7px 10px; min-width:38px;}
+    .segment button.active {color:#256ce1; background:#fff; box-shadow:0 2px 6px rgba(45,72,114,.09);}
+    .map-body { position:relative; height:390px; overflow:hidden; background:#e4f1eb; }
+    #leaflet-map, #offline-map {position:absolute; inset:0; width:100%; height:100%;}
+    #leaflet-map { visibility:hidden; z-index:4; }
+    #offline-map {display:block; z-index:1;}
+    #offline-svg { width:100%; height:100%; display:block; transition:transform .25s ease; transform-origin:52% 49%; }
+    .watermark {position:absolute; bottom:9px; left:11px; z-index:12; font-size:10px; color:rgba(36,69,82,.54); background:rgba(255,255,255,.7); padding:4px 7px; border-radius:6px; backdrop-filter:blur(4px);}
+    .map-float {position:absolute; z-index:20; border:1px solid rgba(230,236,239,.83); background:rgba(255,255,255,.93); backdrop-filter:blur(13px); box-shadow:0 9px 23px rgba(29,71,86,.09); border-radius:13px;}
+    .map-location {top:14px; left:14px; padding:11px 13px; min-width:159px; pointer-events:none;}
+    .map-location .a {font-weight:770; font-size:12px; display:flex; align-items:center; gap:7px; }
+    .map-location .a span {width:7px;height:7px;background:#39bf9f;border-radius:50%;}
+    .map-location .b {font-size:10px;color:#8da0ac; margin-top:5px;}
+    .map-switch {top:14px; right:14px; display:flex; gap:3px; padding:4px;}
+    .map-switch button {border:0; background:transparent; color:#6d8296; border-radius:9px; font-size:11px; font-weight:760; padding:8px 13px; white-space:nowrap;}
+    .map-switch button.active {color:#fff; background:linear-gradient(115deg,#20ad9e,#397af4); box-shadow:0 3px 10px rgba(30,150,190,.28);}
+    .map-tools {right:14px; top:66px; display:flex; flex-direction:column;gap:4px; padding:5px;}
+    .map-tools button {border:0; background:transparent; width:29px;height:29px;display:grid;place-items:center;color:#597185;border-radius:8px;font-size:18px;line-height:1;}
+    .map-tools button:hover {background:#f0f5f8;}
+    .map-tools .split {height:1px;background:#ecf0f2;margin:2px 4px;}
+    .map-legend {right:14px;bottom:14px;padding:10px 12px;min-width:178px;pointer-events:none;}
+    .legend-title {font-weight:750;color:#516477;font-size:10px;margin-bottom:7px;}
+    .colorbar {height:7px;border-radius:99px;background:linear-gradient(90deg,#32bfa5 0%,#a4dca1 27%,#e6dc5b 52%,#f7a64d 75%,#eb6462 100%);}
+    .legend-labels {display:flex;justify-content:space-between;margin-top:6px;font-size:9px;color:#9aabb6;}
+    .map-station-label {font-family: inherit; fill:#526e7b; font-size:13px; font-weight:740;paint-order:stroke; stroke:#fff; stroke-width:4px; stroke-linejoin:round;}
+    .map-river-label {font-family:inherit;fill:#277b9a;font-weight:750;font-size:17px;letter-spacing:6px;paint-order:stroke;stroke:#e5f6fb;stroke-width:4px;}
+    .map-point {cursor:pointer;}
+    .map-point circle.pin-shadow {fill:rgba(24,107,146,.16);}
+    .map-point circle.pin-main {fill:#fff;stroke:#2e9ec1;stroke-width:4;transition:all .16s;}
+    .map-point circle.pin-center {fill:#238db4;}
+    .map-point.active circle.pin-main {stroke:#347bf3;stroke-width:5;}
+    .map-point:hover circle.pin-main {r:12;}
+    .map-bottom { min-height:76px; display:flex; align-items:center;gap:18px;padding:14px 18px; }
+    .map-bottom .tiny {font-size:10px;color:#8da0ad;white-space:nowrap;display:block;margin-bottom:6px;}
+    .play {width:34px;height:34px;border-radius:10px; flex-shrink:0; border:0; background:#ebf3ff;color:#3075e3;display:grid;place-items:center;}
+    .play .icon {width:15px;height:15px;}
+    .slider-wrap {display:flex;align-items:center;gap:12px; flex:1;min-width:0;}
+    .time-slider {width:100%;min-width:65px;accent-color:#3182ef;cursor:pointer;}
+    .date-chip {color:#2b72d9;font-size:11px;font-weight:780;min-width:59px;text-align:right;}
+    .station-strip {display:flex; gap:6px; align-items:center; flex-wrap:wrap;}
+    .station-strip button {border:1px solid #e7ecf1;background:#fafcff;color:#7d91a2;font-size:10px;font-weight:700;padding:8px 9px;border-radius:9px;white-space:nowrap;}
+    .station-strip button.active {color:#2d78e3;border-color:#cbdef9;background:#edf5ff;}
+    .map-footer-note {padding:0 20px 17px; font-size:10px; color:#a3b0bc; line-height:1.5;}
+    .forecast-body {padding:18px 23px 17px;}
+    .forecast-top {display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:13px;}
+    .forecast-top .name {font-weight:740;font-size:14px;}
+    .forecast-top .unit {font-size:11px;color:#9ba9b9;}
+    .legend-inline {display:flex;align-items:center;gap:15px;color:#8698aa;font-size:10px;margin-bottom:8px;justify-content:flex-end;}
+    .legend-inline span {display:flex;align-items:center;gap:6px;white-space:nowrap;}
+    .line-key {width:17px;height:3px;border-radius:9px;background:#20aa8b;}
+    .line-key.future {background:#3b7ded;}
+    .band-key {width:15px;height:9px;border-radius:3px;background:#e3edff;}
+    .chart-wrap {height:281px; position:relative; width:100%;}
+    #forecast-chart {width:100%;height:100%;display:block;overflow:visible;}
+    .chart-tooltip {position:absolute;z-index:5;pointer-events:none;background:rgba(26,42,67,.95);color:#fff;padding:9px 11px;border-radius:9px;font-size:11px;transform:translate(-50%,-110%);box-shadow:0 5px 25px rgba(30,47,72,.15);white-space:nowrap;display:none;}
+    .chart-tooltip em {font-style:normal;color:#8fc5ff;}
+    .forecast-insights {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin:0 22px 19px;padding:17px 0 2px;border-top:1px solid #eff2f6;gap:15px;}
+    .insight {border-right:1px solid #eef1f5;padding-left:2px;}
+    .insight:last-child {border-right:0;}
+    .insight .s-title {font-size:10px;color:#9daaba;font-weight:650;}
+    .insight .s-value {font-size:21px;color:#2c4969;font-weight:780;letter-spacing:-.5px;margin:8px 0 3px;}
+    .insight .s-foot {font-size:10px;color:#99a9b8;}
+    .insight .s-value small {font-size:11px;color:#92a4b3;font-weight:680;}
+    .chart-note {display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:11px;border-top:1px solid #f0f2f6;color:#a1acbb;font-size:10px;}
+    .chart-note strong {color:#4277c6; font-weight:740;}
+    .lower-grid {display:grid;grid-template-columns:minmax(0,1.23fr) minmax(0,1fr);gap:18px;margin-top:18px;}
+    .lower-head {display:flex;justify-content:space-between;align-items:center;padding:20px 22px 0;}
+    .lower-head h3 {font-size:14px;margin:0;font-weight:760;}
+    .lower-head .hint {font-size:11px;color:#a9b4c0;}
+    .drivers {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding:17px 18px 18px;}
+    .driver {padding:12px 13px 10px; background:#fafcfe;border:1px solid #edf1f6;border-radius:13px;min-width:0;}
+    .driver-label {display:flex;align-items:center;justify-content:space-between; gap:4px;font-size:11px;color:#75889a;font-weight:700;}
+    .driver-label .mini-glyph {font-size:13px;color:#62a9c4;}
+    .driver-value {font-size:19px;font-weight:780;letter-spacing:-.5px;margin:7px 0 0;white-space:nowrap;}
+    .driver-value small {font-size:10px;color:#9aaaaf;font-weight:650;letter-spacing:0;}
+    .driver-foot {display:flex;justify-content:space-between;align-items:center;gap:5px;margin-top:5px;font-size:9px;color:#a9b3c0;white-space:nowrap;}
+    .driver-trend {color:#199e87;font-weight:750;}
+    .driver-trend.hot {color:#df8e4d;}
+    .spark {width:100%;height:29px;margin-top:6px;display:block;}
+    .alert-list {display:flex;flex-direction:column;gap:10px;padding:16px 19px 18px;}
+    .alert {display:flex;align-items:flex-start;gap:12px;border-radius:13px;padding:13px 14px;border:1px solid transparent;background:#fffaf5; }
+    .alert .alert-icon {margin-top:1px; width:27px;height:27px;display:grid;place-items:center;border-radius:9px;background:#fff0d9;color:#dc954c; flex-shrink:0;}
+    .alert.good {background:#f3fbf8;}
+    .alert.good .alert-icon {background:#dff7ec;color:#20a381;}
+    .alert .alert-title {font-size:12px;font-weight:765;line-height:1.4;color:#bd773c;}
+    .alert.good .alert-title {color:#27896f;}
+    .alert p {font-size:10.5px;color:#879aa4;line-height:1.6;margin:4px 0 0;}
+    .alert .expand {border:0;background:transparent;color:#a9b4c1;margin-left:auto;padding:0;}
+    .alert-detail {display:none;margin-top:7px;font-size:10px;line-height:1.65;color:#6e8191;}
+    .alert.is-open .alert-detail {display:block;}
+    .data-bar {margin-top:18px;padding:19px 22px;display:grid;grid-template-columns:1.05fr repeat(4,1fr) 1.1fr; align-items:center;gap:13px;}
+    .data-bar-head {font-weight:780;font-size:13px;}
+    .data-bar-head span {display:block;font-size:10px;color:#a0afbc;font-weight:510;margin-top:5px;}
+    .data-item {padding-left:13px;border-left:1px solid #e9edf3;display:flex;align-items:center;gap:9px;min-width:0;}
+    .data-item .d-icon {width:30px;height:30px;display:grid;place-items:center;border-radius:10px;background:#f1f6fc;color:#4d8adc;flex-shrink:0;}
+    .data-item h4 {font-size:11px;font-weight:750;margin:0 0 4px;white-space:nowrap;}
+    .data-item p {font-size:10px;color:#a5b0bd;margin:0;white-space:nowrap;}
+    .export-btn {border:1px solid #d8e7fa;background:#f3f8ff;color:#2e75dc;border-radius:10px;font-size:11px;font-weight:750;padding:11px 12px;display:flex;align-items:center;justify-content:center;gap:7px;white-space:nowrap;}
+    footer {padding:25px 6px 0;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;color:#9faab8;font-size:10px;line-height:1.6;}
+    .leaflet-container {font-family:inherit;}
+    .leaflet-control-attribution {font-size:9px!important;}
+    .leaflet-control-zoom {display:none;}
+    .leaflet-div-icon {background:transparent;border:0;}
+    .live-marker {width:17px;height:17px;border-radius:50%;background:#2788d4;border:4px solid white;box-shadow:0 0 0 2px #4b95e2,0 3px 14px #165b8270;}
+    .live-marker.selected {background:#2468ea;box-shadow:0 0 0 3px #3b7aff,0 5px 18px #2468ea40;}
+    .leaflet-tooltip {border:1px solid #e7edf5;border-radius:9px;box-shadow:0 7px 25px rgba(44,61,91,.08);padding:6px 9px;font-weight:650;font-size:11px;color:#3c6074;}
+    .live-marker {cursor:pointer;}
+    .live-marker.core {background:#e9a13b;box-shadow:0 0 0 2px #eab354,0 3px 14px #8a5c1670;}
+    .station-popup .leaflet-popup-content-wrapper {border-radius:14px;box-shadow:0 14px 40px rgba(20,50,70,.2);padding:0;overflow:hidden;}
+    .station-popup .leaflet-popup-content {margin:0;width:240px!important;line-height:1.5;}
+    .sp-head {padding:11px 14px 9px;background:linear-gradient(115deg,#eefaf6,#eaf4fd);border-bottom:1px solid #e6eef3;}
+    .sp-name {font-size:13px;font-weight:780;color:#1c3f52;}
+    .sp-sub {font-size:9.5px;color:#8ba0ae;margin-top:2px;}
+    .sp-rows {padding:6px 14px 10px;}
+    .sp-row {display:flex;justify-content:space-between;align-items:baseline;padding:5px 0;border-bottom:1px dashed #eef2f5;font-size:11px;}
+    .sp-row:last-child {border-bottom:0;}
+    .sp-row .k {color:#7f93a4;font-weight:650;}
+    .sp-row .k small {display:block;color:#b0bcc7;font-size:9px;font-weight:500;}
+    .sp-row .v {font-weight:780;color:#24435c;font-variant-numeric:tabular-nums;}
+    .sp-risk {display:inline-flex;align-items:center;gap:5px;font-weight:780;}
+    .sp-risk i {width:8px;height:8px;border-radius:50%;display:inline-block;}
+    .toast { position:fixed; z-index:5000; right:28px; bottom:28px; background:#1b3451; color:#fff; border-radius:11px; padding:12px 16px; font-size:12px; box-shadow:0 8px 28px #1b345140; opacity:0; pointer-events:none; transform:translateY(12px); transition:all .25s; }
+    .toast.show {opacity:1;transform:translateY(0);}
+    @media(max-width:1220px) {
+      .shell {width:min(100% - 44px,1600px);}
+      .nav button {padding:9px 12px;}
+      .main-grid,.lower-grid {grid-template-columns:1.05fr 1fr;}
+      .map-bottom {flex-wrap:wrap;}
+      .station-strip {width:100%;}
+      .data-bar {grid-template-columns:1fr repeat(2,1fr);}
+      .data-item:nth-of-type(4) {border-left:0;padding-left:0;}
+      .export-btn {grid-column:3;}
+    }
+    @media(max-width:920px) {
+      .main-grid,.lower-grid {grid-template-columns:1fr;}
+      .kpis {grid-template-columns:repeat(2,minmax(0,1fr));}
+      .nav {display:none;}
+      .map-body {height:420px;}
+      .hero-right {position:static;align-items:flex-start;margin-top:16px;}
+      .hero {padding:26px 27px;}
+      .data-bar {grid-template-columns:repeat(2,1fr);}
+      .data-bar-head,.export-btn {grid-column:span 2;}
+      .data-item {border-left:0;padding-left:0;}
+    }
+    @media(max-width:570px) {
+      .shell {width:calc(100% - 26px);}
+      .topbar {height:68px;}
+      .brand-cn {font-size:16px;}.brand-mark{width:34px;height:34px;}
+      .demo-pill {display:none;}
+      .main {padding-top:16px;}
+      .hero h1 {font-size:26px;}
+      .kpis {gap:9px;margin-top:11px;}
+      .kpi {height:111px;padding:15px;}.kpi-icon {display:none!important;}.kpi-main .value {font-size:25px;}
+      .panel-head {padding:0 13px;}.panel-title h3 {font-size:12px;}.panel-title p {font-size:9px;}
+      .soft-select {min-width:auto;max-width:111px;padding-left:8px;}
+      .head-controls {gap:3px;}.segment button {min-width:32px;padding:7px 7px;}
+      .map-body {height:340px;}.map-bottom{padding:12px;gap:10px;}
+      .forecast-body {padding:15px 13px;}.chart-wrap {height:245px;}
+      .drivers {grid-template-columns:repeat(2,1fr);}
+      .data-bar {gap:17px;}
+      .hero-right {display:none;}
+    }
+    @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important;}}
+  </style>
+</head>
+<body>
+  <svg xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">
+    <symbol id="ic-wave" viewBox="0 0 24 24"><path d="M2 9c3-2.7 5-2.7 8 0s5 2.7 8 0 3-2.7 4-2.5M2 16c3-2.7 5-2.7 8 0s5 2.7 8 0 3-2.7 4-2.5"/></symbol>
+    <symbol id="ic-chart" viewBox="0 0 24 24"><path d="M3 18 9 11l4 4 8-10"/><path d="M16 5h5v5"/></symbol>
+    <symbol id="ic-layers" viewBox="0 0 24 24"><path d="M12 3 2 8l10 5 10-5-10-5ZM2 12l10 5 10-5M2 16l10 5 10-5"/></symbol>
+    <symbol id="ic-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></symbol>
+    <symbol id="ic-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="ic-thermo" viewBox="0 0 24 24"><path d="M10 14V5a3 3 0 0 1 6 0v9a5 5 0 1 1-6 0Z"/><path d="M13 8v9"/></symbol>
+    <symbol id="ic-warning" viewBox="0 0 24 24"><path d="M10.4 4.5a1.8 1.8 0 0 1 3.2 0L22 19a2 2 0 0 1-1.7 3H3.7A2 2 0 0 1 2 19L10.4 4.5Z"/><path d="M12 9v5m0 4h.01"/></symbol>
+    <symbol id="ic-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m7.5 12 3.1 3.1 6-6.2"/></symbol>
+    <symbol id="ic-download" viewBox="0 0 24 24"><path d="M12 3v12m-4-4 4 4 4-4M4 16v5h16v-5"/></symbol>
+    <symbol id="ic-pin" viewBox="0 0 24 24"><path d="M20 10c0 5.5-8 11-8 11S4 15.5 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></symbol>
+    <symbol id="ic-play" viewBox="0 0 24 24"><path d="m7 4 13 8-13 8V4Z"/></symbol>
+    <symbol id="ic-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol>
+    <symbol id="ic-satellite" viewBox="0 0 24 24"><path d="m9 15 6-6M4 13 2 9l4-4 5 2 2 3-4 4-5-1ZM13 4l4-2 5 5-2 4-3 1M13 17a4 4 0 0 1 4 4M13 13a8 8 0 0 1 8 8"/></symbol>
+    <symbol id="ic-data" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v7c0 1.7 4 3 9 3s9-1.3 9-3V5M3 12v7c0 1.7 4 3 9 3s9-1.3 9-3v-7"/></symbol>
+    <symbol id="ic-cloud" viewBox="0 0 24 24"><path d="M7 18H5a4 4 0 0 1-1-7.9 7 7 0 0 1 13.5-1 4.6 4.6 0 0 1 .8 9H7Z"/></symbol>
+    <symbol id="ic-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+    <symbol id="ic-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5h.01"/></symbol>
+  </svg>
+  <header class="topbar">
+    <div class="shell top-inner">
+      <div class="brand" aria-label="蓝藻智测">
+        <span class="brand-mark"><svg class="icon" style="width:25px;height:25px;stroke-width:2.3"><use href="#ic-wave"/></svg></span>
+        <div><div class="brand-cn">蓝藻智测 <span style="font-size:10px; font-weight:650;color:#78a2a8;margin-left:5px">ALGAE<span style="color:#3aa3b7">·</span>AI</span></div><span class="brand-en">AQUATIC FORECASTING LAB</span></div>
+      </div>
+      <nav class="nav" aria-label="页面导航">
+        <button data-scroll="overview" class="active">总览</button>
+        <button data-scroll="riskmap">风险地图</button>
+        <button data-scroll="forecast">时序预测</button>
+        <button data-scroll="alerts">风险预警</button>
+        <button data-scroll="datasources">数据来源</button>
+      </nav>
+      <div class="top-actions">
+        <span class="demo-pill" title="当前展示均为模拟数据">UI 原型 · 模拟数据</span>
+        <button class="icon-btn" id="aboutBtn" title="关于原型" aria-label="关于原型"><svg class="icon"><use href="#ic-info"/></svg></button>
+      </div>
+    </div>
+  </header>
+
+  <main class="main shell" id="overview">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="eyebrow">WATERSHED INTELLIGENCE · QIANTANG RIVER BASIN</div>
+      <h1 id="hero-title">让蓝藻风险，在三江汇流处被提前看见。</h1>
+      <p>聚焦千岛湖下游的新安江、兰江与富春江交汇水域，融合遥感、水文、气象及监测序列，探索河流型水域蓝藻风险的时空预测。</p>
+      <div class="hero-meta"><span><i class="dot"></i> 浙江 · 建德梅城</span><span>新安江 + 兰江 → 富春江</span><span>示例基准日：2026.08.12</span></div>
+      <div class="hero-right"><span class="region">MEICHENG · SANJIANG CONFLUENCE</span><span class="coords">29.54° N · 119.50° E (梅城镇参考坐标)</span></div>
+    </section>
+
+    <section class="kpis" aria-label="风险摘要">
+      <article class="card kpi kpi-risk"><div class="kpi-main"><div class="kpi-label">核心断面风险</div><div class="value" id="riskLevel">中等 <small id="riskValue">0.64</small></div><div class="foot">蓝藻发生概率 · 模拟</div></div><span class="kpi-icon"><svg class="icon"><use href="#ic-target"/></svg></span></article>
+      <article class="card kpi kpi-trend"><div class="kpi-main"><div class="kpi-label">未来 72 小时趋势</div><div class="value">+17.8<small>%</small></div><div class="foot">相对当前基准情景</div></div><span class="kpi-icon"><svg class="icon"><use href="#ic-chart"/></svg></span></article>
+      <article class="card kpi kpi-point"><div class="kpi-main"><div class="kpi-label">重点研究区域</div><div class="value" style="font-size:24px;letter-spacing:-.8px">三江口</div><div class="foot">梅城 · 汇流至下游河段</div></div><span class="kpi-icon"><svg class="icon"><use href="#ic-pin"/></svg></span></article>
+      <article class="card kpi kpi-horizon"><div class="kpi-main"><div class="kpi-label">预测时间窗口</div><div class="value" id="horizonKpi">7<small>天</small></div><div class="foot">支持切换至 14 天演示</div></div><span class="kpi-icon"><svg class="icon"><use href="#ic-clock"/></svg></span></article>
+    </section>
+
+    <div class="section-row"><h2>流域时空态势</h2><p>研究展示原型 / 数据非实时 / 风险图层仅作视觉演示</p></div>
+    <section class="main-grid" aria-label="地图与时间序列预测">
+      <article class="card panel" id="riskmap">
+        <div class="panel-head">
+          <div class="panel-title"><span class="h-icon"><svg class="icon"><use href="#ic-layers"/></svg></span><div><h3>三江口蓝藻风险空间分布</h3><p>新安江 · 兰江 · 富春江 / 演示分区</p></div></div>
+          <div class="head-controls"><select id="mapLayer" class="soft-select" aria-label="地图变量"><option value="risk">蓝藻风险</option><option value="chl">叶绿素 a</option><option value="temp">表层水温</option></select></div>
+        </div>
+        <div class="map-body" id="mapContainer">
+          <!-- 离线水系示意图：流向结构符合梅城三江口地理事实，不代表测绘边界 -->
+          <div id="offline-map">
+            <svg id="offline-svg" viewBox="0 0 960 570" preserveAspectRatio="xMidYMid slice" role="img" aria-label="水系示意：新安江自西向东与自南向北流的兰江在梅城汇合，并向东北形成富春江">
+              <defs>
+                <linearGradient id="terra" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ecf2e9"/><stop offset=".49" stop-color="#e4efea"/><stop offset="1" stop-color="#f1f4e8"/></linearGradient>
+                <linearGradient id="water" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#b0dfdf"/><stop offset=".5" stop-color="#98d4de"/><stop offset="1" stop-color="#77c2d7"/></linearGradient>
+                <radialGradient id="heatRed"><stop stop-color="#ef6163" stop-opacity=".76"/><stop offset=".38" stop-color="#efb15f" stop-opacity=".63"/><stop offset=".7" stop-color="#d7d961" stop-opacity=".43"/><stop offset="1" stop-color="#43d1ab" stop-opacity="0"/></radialGradient>
+                <radialGradient id="heatYellow"><stop stop-color="#efb963" stop-opacity=".68"/><stop offset=".5" stop-color="#d5e47d" stop-opacity=".43"/><stop offset="1" stop-color="#34c7a8" stop-opacity="0"/></radialGradient>
+                <radialGradient id="heatGreen"><stop stop-color="#48caab" stop-opacity=".37"/><stop offset="1" stop-color="#48caab" stop-opacity="0"/></radialGradient>
+                <filter id="softBlur"><feGaussianBlur stdDeviation="5"/></filter>
+                <mask id="riverMask"><rect x="0" y="0" width="960" height="570" fill="#000"/><path d="M-65 282C110 241 215 305 342 287S449 321 515 333" stroke="white" stroke-width="76" fill="none" stroke-linecap="round"/><path d="M360 628C368 540 412 483 423 432S458 361 515 333" stroke="white" stroke-width="78" fill="none" stroke-linecap="round"/><path d="M515 333C592 297 597 244 673 218S766 133 853 118S921 101 1020 41" stroke="white" stroke-width="90" fill="none" stroke-linecap="round"/></mask>
+              </defs>
+              <rect width="960" height="570" fill="url(#terra)"/>
+              <path d="M0 10 Q80 40 137 0 M-20 89 Q111 56 200 89T420 35T760 48T990 23 M-40 140 Q100 102 206 136T395 101T680 109T990 60 M-10 180 Q106 160 203 193T410 160T680 165T960 132 M-10 360 Q138 326 225 367T411 367T670 359T980 275 M-10 420 Q135 386 230 431T475 414T716 432T990 351 M-10 477 Q163 451 253 496T465 470T743 490T1000 408 M0 550 Q166 525 260 553T520 534T990 475" stroke="#b4d0c1" stroke-width="2.5" fill="none" opacity=".35"/>
+              <g fill="#d2e3d2" opacity=".55"><path d="M0 0h257q-44 80-131 109T0 118Z"/><path d="M726 0h234v231q-53-10-104-87T726 0Z"/><path d="M0 414q175-20 253 84l-66 72H0Z"/><path d="M677 450q86-74 283-72v192H761Z"/></g>
+              <g stroke="#c7d8c9" stroke-width="1.4" fill="none" opacity=".85"><path d="M38 25C112 90 105 129 168 156S237 233 309 209"/><path d="M22 47C89 106 96 156 146 185S227 267 285 252"/><path d="M782 15C739 58 758 80 806 102S897 197 932 211"/><path d="M849 18C824 64 839 93 875 118S948 171 970 190"/><path d="M38 450C105 462 143 517 161 576"/><path d="M69 437C153 458 171 497 194 570"/><path d="M697 545C721 500 777 470 860 479"/></g>
+              <g stroke="#fff" stroke-width="15" opacity=".65" fill="none"><path d="M-15 100Q122 155 233 176T480 125"/><path d="M114 570Q180 492 266 449T408 215"/><path d="M486 570Q527 460 689 433T1005 342"/></g>
+              <g stroke="#bfd3c7" stroke-width="3" opacity=".7" fill="none"><path d="M-15 100Q122 155 233 176T480 125"/><path d="M114 570Q180 492 266 449T408 215"/><path d="M486 570Q527 460 689 433T1005 342"/></g>
+              <!-- 水系矢量图：西→东 新安江；南→北 兰江；东北 富春江 -->
+              <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M-65 282C110 241 215 305 342 287S449 321 515 333" stroke="#f7fcfa" stroke-width="88"/><path d="M360 628C368 540 412 483 423 432S458 361 515 333" stroke="#f7fcfa" stroke-width="90"/><path d="M515 333C592 297 597 244 673 218S766 133 853 118S921 101 1020 41" stroke="#f7fcfa" stroke-width="102"/>
+                <path d="M-65 282C110 241 215 305 342 287S449 321 515 333" stroke="url(#water)" stroke-width="76"/><path d="M360 628C368 540 412 483 423 432S458 361 515 333" stroke="url(#water)" stroke-width="78"/><path d="M515 333C592 297 597 244 673 218S766 133 853 118S921 101 1020 41" stroke="url(#water)" stroke-width="90"/>
+              </g>
+              <g id="offlineHeat" mask="url(#riverMask)" filter="url(#softBlur)"><ellipse id="hotspotA" cx="531" cy="322" rx="195" ry="125" fill="url(#heatRed)"/><ellipse id="hotspotB" cx="758" cy="166" rx="176" ry="114" fill="url(#heatYellow)"/><ellipse id="hotspotC" cx="421" cy="434" rx="128" ry="163" fill="url(#heatGreen)"/></g>
+              <g opacity=".48" stroke="#f1fdff" fill="none" stroke-width="2" stroke-linecap="round"><path d="M2 278C112 252 223 298 327 287"/><path d="M385 555C381 498 429 412 454 389"/><path d="M596 279Q663 206 758 156"/></g>
+              <!-- 河名与区域名 -->
+              <text x="189" y="249" transform="rotate(6 189 249)" class="map-river-label">新安江</text><text x="319" y="478" transform="rotate(-62 319 478)" class="map-river-label">兰江</text><text x="743" y="115" transform="rotate(-33 743 115)" class="map-river-label">富春江</text>
+              <g font-size="13" fill="#839b9b" font-weight="700"><text x="460" y="157">梅城古镇</text><text x="192" y="113">杨村桥方向</text><text x="810" y="347">三都方向</text><text x="148" y="483">大洋方向</text></g>
+              <g transform="translate(558 322)"><rect x="-65" y="-42" width="126" height="31" rx="10" fill="#fff" opacity=".92"/><text x="-53" y="-22" fill="#3b6978" font-size="14" font-weight="760">梅城三江口</text><path d="M-8 -10 0 12 11-10" fill="#fff" opacity=".92"/></g>
+              <g class="map-point" data-station="xin" transform="translate(277 286)" tabindex="0" role="button" aria-label="查看新安江上游示意点"><circle class="pin-shadow" r="17"/><circle class="pin-main" r="10"/><circle class="pin-center" r="4"/><text class="map-station-label" x="-42" y="-23">新安江</text></g>
+              <g class="map-point" data-station="lan" transform="translate(403 485)" tabindex="0" role="button" aria-label="查看兰江入汇示意点"><circle class="pin-shadow" r="17"/><circle class="pin-main" r="10"/><circle class="pin-center" r="4"/><text class="map-station-label" x="19" y="4">兰江</text></g>
+              <g class="map-point active" data-station="mix" transform="translate(530 338)" tabindex="0" role="button" aria-label="查看三江口核心示意点"><circle class="pin-shadow" r="19"/><circle class="pin-main" r="11"/><circle class="pin-center" r="4"/></g>
+              <g class="map-point" data-station="fuchun" transform="translate(750 168)" tabindex="0" role="button" aria-label="查看富春江下游示意点"><circle class="pin-shadow" r="17"/><circle class="pin-main" r="10"/><circle class="pin-center" r="4"/><text class="map-station-label" x="18" y="6">下游</text></g>
+              <g transform="translate(55 521)" font-weight="700" fill="#7e9a9b" font-size="12"><path d="M0 14V-5M0-5l-7 10h14Z" fill="#6da69a"/><text x="-4" y="-12">N</text></g>
+            </svg>
+          </div>
+          <div id="leaflet-map" aria-label="联网地图：建德梅城三江口"></div>
+          <div class="map-float map-location"><div class="a"><span></span> 梅城 · 三江汇流区</div><div class="b" id="mapDetailLabel">基准日 · 08/12 · 模拟风险</div></div>
+          <div class="map-float map-switch" role="group" aria-label="底图切换"><button type="button" id="swSat" class="active">卫星影像</button><button type="button" id="swVec">标准地图</button></div>
+          <div class="map-float map-tools" aria-label="地图控制"><button type="button" id="zoomIn" title="放大地图" aria-label="放大地图">+</button><button type="button" id="zoomOut" title="缩小地图" aria-label="缩小地图">−</button><div class="split"></div><button type="button" id="resetMap" title="回到梅城三江口" aria-label="回到梅城三江口"><svg class="icon" style="width:15px;height:15px"><use href="#ic-target"/></svg></button></div>
+          <div class="map-float map-legend"><div class="legend-title" id="mapLegendTitle">蓝藻风险等级 · 模拟</div><div class="colorbar"></div><div class="legend-labels"><span>低</span><span>较低</span><span>中</span><span>较高</span><span>高</span></div></div>
+          <div class="watermark" id="mapMode">水系示意图 · 非测绘底图</div>
+        </div>
+        <div class="map-bottom">
+          <button class="play" id="playButton" type="button" title="播放未来7天的模拟风险变化" aria-label="播放时间序列"><svg class="icon"><use href="#ic-play"/></svg></button>
+          <div class="slider-wrap"><div style="min-width:0; flex:1"><span class="tiny">风险演变时间轴 · 2026 年 8 月演示情景</span><input id="daySlider" type="range" class="time-slider" min="0" max="7" value="0" aria-label="选择预测天数" /></div><span class="date-chip" id="dayLabel">08 / 12</span></div>
+        </div>
+        <div class="map-bottom" style="border-top:1px solid #f2f4f7;min-height:53px;padding-top:9px;padding-bottom:11px"><span style="font-size:10px;color:#9aabb7;white-space:nowrap">河段切换</span><div class="station-strip" id="stationStrip"><button data-id="xin">新安江来水</button><button data-id="lan">兰江来水</button><button data-id="mix" class="active">三江口核心</button><button data-id="fuchun">富春江下游</button></div></div>
+        <div class="map-footer-note">空间热点、河段点位与风险值均为示意；真实业务需接入水体边界、监测站坐标及模型栅格预测结果。</div>
+      </article>
+
+      <article class="card panel" id="forecast">
+        <div class="panel-head">
+          <div class="panel-title"><span class="h-icon"><svg class="icon"><use href="#ic-chart"/></svg></span><div><h3>关键水质指标时序预测</h3><p id="stationNameHeader">三江口核心断面 / 研究演示</p></div></div>
+          <div class="head-controls"><select id="metricSelect" class="soft-select" aria-label="选择预测变量"><option value="chl">叶绿素 a</option><option value="phyco">藻蓝蛋白</option><option value="risk">蓝藻风险</option><option value="temp">水温</option></select><div class="segment" aria-label="预测时间范围"><button class="active" data-horizon="7">7 天</button><button data-horizon="14">14 天</button></div></div>
+        </div>
+        <div class="forecast-body">
+          <div class="forecast-top"><span class="name" id="metricLabel">叶绿素 a 浓度预测</span><span class="unit" id="metricUnit">μg/L</span></div>
+          <div class="legend-inline"><span><i class="line-key"></i> 历史示例</span><span><i class="line-key future"></i> 未来预测示例</span><span><i class="band-key"></i> 模拟预测区间</span></div>
+          <div class="chart-wrap" id="chartWrap"><svg id="forecast-chart" role="img" aria-label="历史时间序列、未来预测和不确定性带的交互图表" viewBox="0 0 600 270" preserveAspectRatio="none"></svg><div class="chart-tooltip" id="chartTooltip"></div></div>
+          <div class="chart-note"><span>预测起点：<strong>2026.08.12</strong>　|　虚线后为预测值</span><span>点击或悬停节点查看数值</span></div>
+        </div>
+        <div class="forecast-insights" aria-label="预测摘要（演示数据）">
+          <div class="insight"><div class="s-title">预测窗口内峰值</div><div class="s-value" id="peakVal">—</div><div class="s-foot" id="peakDate">预测结果示意</div></div>
+          <div class="insight"><div class="s-title">超出演示阈值天数</div><div class="s-value" id="overDays">—</div><div class="s-foot">非实际预警标准</div></div>
+          <div class="insight"><div class="s-title">结果属性</div><div class="s-value" style="font-size:17px;color:#1ca58d">Scenario</div><div class="s-foot">示意预测 · 非实测</div></div>
+        </div>
+      </article>
+    </section>
+
+    <section class="lower-grid" aria-label="环境驱动因素与风险预警">
+      <article class="card" id="drivers">
+        <div class="lower-head"><h3>关键环境驱动因子</h3><span class="hint">多源环境变量 · 示意场景</span></div>
+        <div class="drivers" id="driversGrid">
+          <div class="driver" data-spark="28,29,30,29,31,32,31,33"><div class="driver-label"><span>🌡️ 气温</span><span class="mini-glyph">↗</span></div><div class="driver-value">30.2 <small>°C</small></div><div class="driver-foot"><span>近 7 日</span><span class="driver-trend hot">↑ 1.8 °C</span></div><svg class="spark" aria-hidden="true"></svg></div>
+          <div class="driver" data-spark="4.5,5.1,4.9,4.2,3.7,4.2,4.6,4.1"><div class="driver-label"><span>〰️ 风速</span><span class="mini-glyph">↘</span></div><div class="driver-value">4.6 <small>m/s</small></div><div class="driver-foot"><span>近 7 日</span><span class="driver-trend">↓ 0.8 m/s</span></div><svg class="spark" aria-hidden="true"></svg></div>
+          <div class="driver" data-spark="0,5,1,0.2,3,0.8,0.1,2.4"><div class="driver-label"><span>🌧️ 降水</span><span class="mini-glyph">↘</span></div><div class="driver-value">2.4 <small>mm</small></div><div class="driver-foot"><span>逐日值示意</span><span class="driver-trend">↓ 6.1 mm</span></div><svg class="spark" aria-hidden="true"></svg></div>
+          <div class="driver" data-spark=".03,.032,.036,.034,.038,.041,.04,.044"><div class="driver-label"><span>◉ 总磷</span><span class="mini-glyph">↗</span></div><div class="driver-value">0.068 <small>mg/L</small></div><div class="driver-foot"><span>外部营养盐指标</span><span class="driver-trend hot">↑ 0.012</span></div><svg class="spark" aria-hidden="true"></svg></div>
+          <div class="driver" data-spark="1.1,1.14,1.12,1.26,1.31,1.27,1.36,1.42"><div class="driver-label"><span>◉ 总氮</span><span class="mini-glyph">↗</span></div><div class="driver-value">1.42 <small>mg/L</small></div><div class="driver-foot"><span>外部营养盐指标</span><span class="driver-trend hot">↑ 0.08</span></div><svg class="spark" aria-hidden="true"></svg></div>
+          <div class="driver" data-spark="1.02,.99,.96,.94,.89,.86,.82,.78"><div class="driver-label"><span>≋ 透明度</span><span class="mini-glyph">↘</span></div><div class="driver-value">0.78 <small>m</small></div><div class="driver-foot"><span>Secchi 深度示意</span><span class="driver-trend">↓ 0.11 m</span></div><svg class="spark" aria-hidden="true"></svg></div>
+        </div>
+      </article>
+      <article class="card" id="alerts">
+        <div class="lower-head"><h3>风险预警与研究建议</h3><span class="hint">依据演示阈值生成</span></div>
+        <div class="alert-list">
+          <div class="alert" id="alertA"><span class="alert-icon"><svg class="icon"><use href="#ic-warning"/></svg></span><div><div class="alert-title">未来 48 小时：汇流区风险抬升</div><p>模拟情景提示：新安江与兰江混合水域的蓝藻风险可能增加。</p><div class="alert-detail">验证要点：分支来水温差、流速、滞留时间、光照和营养盐浓度；设置事件级预警阈值并按实测记录校准。</div></div><button class="expand" data-alert="alertA" aria-label="展开预警说明" title="展开说明">⌄</button></div>
+          <div class="alert good" id="alertB"><span class="alert-icon"><svg class="icon"><use href="#ic-check"/></svg></span><div><div class="alert-title">建议关注三江口至富春江下游河段</div><p>优先展示监测点时间序列，以及预测不确定性的空间差异。</p><div class="alert-detail">研究建议：汇流前两支来水分别建模，比较简单拼接与水动力驱动的时空模型，并单独评估强降水和调度事件的泛化性。</div></div><button class="expand" data-alert="alertB" aria-label="展开研究建议" title="展开说明">⌄</button></div>
+        </div>
+      </article>
+    </section>
+
+    <section class="card data-bar" id="datasources" aria-label="数据来源与导出">
+      <div class="data-bar-head">多源数据融合<span>未来可接入真实观测与预测接口</span></div>
+      <div class="data-item"><span class="d-icon"><svg class="icon"><use href="#ic-satellite"/></svg></span><div><h4>卫星遥感</h4><p>水色 / 藻类特征</p></div></div>
+      <div class="data-item"><span class="d-icon"><svg class="icon"><use href="#ic-wave"/></svg></span><div><h4>水文站点</h4><p>流量 / 水位 / 调度</p></div></div>
+      <div class="data-item"><span class="d-icon"><svg class="icon"><use href="#ic-cloud"/></svg></span><div><h4>气象再分析</h4><p>气温 / 风 / 降水</p></div></div>
+      <div class="data-item"><span class="d-icon"><svg class="icon"><use href="#ic-data"/></svg></span><div><h4>水质监测</h4><p>叶绿素 / 营养盐</p></div></div>
+      <button class="export-btn" id="exportBtn" type="button"><svg class="icon" style="width:15px;height:15px"><use href="#ic-download"/></svg>导出模拟序列 CSV</button>
+    </section>
+    <footer><span>© 2026 AlgaeAI Research Prototype · 梅城三江口研究可视化界面</span><span>免责声明：所有监测数值、风险概率、空间热点和预测区间均为前端演示数据，不用于真实决策。</span></footer>
+  </main>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    'use strict';
+    // ======================= 模拟数据（替换真实 API 的主要入口） =======================
+    // 天地图「浏览器端」Key：申请（免费）后粘贴到引号内，地图即加载真实天地图底图；留空则显示离线水系示意图
+    // 真实 Key 由本地 .env 提供，serve.ps1 启动时注入替换 __TDT_KEY__，请勿把真实 Key 提交进仓库
+    const TDT_KEY = '__TDT_KEY__';
+    const BASE_DATE = new Date('2026-08-12T12:00:00Z'); // 固定 UTC 正午，避免本地时区导致日期前移
+    // 站点坐标位于真实河道中线上（见 CHANNELS），CGCS2000/WGS84 在本尺度下通用
+    const STATIONS = {
+      xin:    {name:'新安江来水', desc:'新安江上游断面', lat:29.53657, lng:119.46859, bias:-0.12, chl:38.6, temp:28.4, ph:7.9, dox:8.6},
+      lan:    {name:'兰江来水',   desc:'兰江入汇断面',   lat:29.48055, lng:119.53125, bias: 0.08, chl:44.2, temp:29.1, ph:8.1, dox:8.2},
+      mix:    {name:'三江口核心', desc:'三江汇流断面',   lat:29.53359, lng:119.50979, bias: 0.00, chl:50.3, temp:29.8, ph:8.3, dox:8.0, core:true},
+      fuchun: {name:'富春江下游', desc:'汇流后下游断面', lat:29.54404, lng:119.54670, bias: 0.04, chl:47.5, temp:29.5, ph:8.2, dox:8.1}
+    };
+    const METRICS = {
+      chl:   { name:'叶绿素 a 浓度预测', unit:'μg/L', min:0, max:110, digits:0, base:[29,31,34,35,40,43,45], future:[48,52,56,61,66,71,75,77,81,84,88,90,93,95], spread:8, color:'#3980ea', threshold:70 },
+      phyco: { name:'藻蓝蛋白浓度预测',unit:'μg/L',min:0,max:230,digits:0,base:[65,69,73,79,87,91,101],future:[106,117,128,142,150,158,167,173,179,184,192,200,208,214],spread:17,color:'#3980ea',threshold:160 },
+      risk:  { name:'蓝藻风险概率预测',unit:'%',min:0,max:100,digits:0,base:[37,40,43,48,54,59,64],future:[65,68,72,76,78,81,84,86,87,89,90,91,92,93],spread:11,color:'#3980ea',threshold:80 },
+      temp:  { name:'表层水温预测',unit:'°C',min:20,max:37,digits:1,base:[28.1,28.3,28.7,28.9,29.2,29.6,29.8],future:[30,30.2,30.6,31,31.1,31.4,31.6,31.5,31.9,32.2,32.2,32.1,32.5,32.6],spread:1.1,color:'#3980ea',threshold:33 }
+    };
+    const state = {metric:'chl', horizon:7, station:'mix', day:0, layer:'risk', offlineZoom:1, playing:false, timer:null, leaflet:null, leafletMarkers:{}, heat:null, basemap:'sat', tdtErrors:0, mapLoaded:false};
+    const $ = id => document.getElementById(id);
+    function icon(id){return '<svg class="icon"><use href="#'+id+'"/></svg>';}
+    function toast(msg){const el=$('toast');el.textContent=msg;el.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.classList.remove('show'),2700);}
+    function datum(date){return [String(date.getUTCMonth()+1).padStart(2,'0'),String(date.getUTCDate()).padStart(2,'0')];}
+    function dayDate(offset){return new Date(BASE_DATE.getTime()+offset*86400000);}
+    function dateString(offset){return datum(dayDate(offset)).join('/');}
+    function stationOffset(metric, station){const v=STATIONS[station].bias;return metric==='chl'?v*38:metric==='phyco'?v*82:metric==='risk'?v*40:v*5;}
+    function metricData(metric,station){const m=METRICS[metric],o=stationOffset(metric,station);return {hist:m.base.map((v,i)=>v+o*Math.max(.65,i/6)), fut:m.future.map((v,i)=>v+o*(.7+i/20))};}
+    function rounded(v,dec){return Number(v).toFixed(dec);}
+    function renderChart(){
+      const m=METRICS[state.metric],{hist,fut}=metricData(state.metric,state.station), future=fut.slice(0,state.horizon);
+      $('metricLabel').textContent=m.name; $('metricUnit').textContent=m.unit; $('stationNameHeader').textContent=STATIONS[state.station].name+' / 研究演示';
+      $('horizonKpi').innerHTML=state.horizon+'<small>天</small>';
+      const svg=$('forecast-chart'); const W=640,H=282,pad={l:44,r:13,t:24,b:38},x0=pad.l,x1=W-pad.r,y0=pad.t,y1=H-pad.b;
+      const arr=hist.concat(future), total=arr.length, nx=i=>x0+i*(x1-x0)/(total-1),ny=v=>y1-(v-m.min)/(m.max-m.min)*(y1-y0);
+      const fidx=hist.length-1, forecastSeries=[hist[6],...future], areaTop=[],areaBottom=[];
+      forecastSeries.forEach((v,j)=>{const band=(j===0?1:m.spread*(.55+j/state.horizon*.95));areaTop.push([nx(fidx+j),ny(Math.min(m.max,v+band))]); areaBottom.push([nx(fidx+j),ny(Math.max(m.min,v-band))]);});
+      const pts=xs=>xs.map(v=>v.map(n=>Number(n).toFixed(2)).join(',')).join(' ');
+      const hPoints=hist.map((v,i)=>[nx(i),ny(v)]),fPoints=forecastSeries.map((v,i)=>[nx(i+fidx),ny(v)]);
+      const area=[...areaTop,...areaBottom.reverse()];let marks='';
+      for(let i=0;i<=4;i++){const val=m.min+(m.max-m.min)*i/4,y=ny(val);marks+=`<line x1="${x0}" y1="${y}" x2="${x1}" y2="${y}" stroke="#eaf0f5" stroke-width="1"/><text x="${x0-10}" y="${y+4}" fill="#9daabb" font-size="11" text-anchor="end">${m.digits?val.toFixed(1):Math.round(val)}</text>`;}
+      const step=state.horizon===7?2:3;
+      for(let i=0;i<total;i++){if(i%step!==0 && i!==fidx && i!==total-1)continue;const date=dateString(i-6),x=nx(i);marks+=`<text x="${x}" y="${y1+23}" text-anchor="middle" fill="${i===fidx?'#3578e0':'#a4afbd'}" font-size="10.5" font-weight="${i===fidx?750:500}">${date}</text>`;}
+      const tickDots=arr.map((v,i)=>`<circle class="chart-dot" data-index="${i}" cx="${nx(i)}" cy="${ny(v)}" r="${i===fidx?4:3}" fill="#fff" stroke="${i<=fidx?'#1fa38a':'#3980ea'}" stroke-width="2.2" style="cursor:crosshair;pointer-events:all"/>`).join('');
+      const thresholdY=ny(m.threshold);
+      const maxVal=Math.max(...future),peakIndex=future.indexOf(maxVal),aboveDays=future.filter(v=>v>=m.threshold).length;
+      $('peakVal').innerHTML=rounded(maxVal,m.digits)+' <small>'+m.unit+'</small>';
+      $('peakDate').textContent=dateString(peakIndex+1)+' · 演示数据';
+      $('overDays').innerHTML=aboveDays+' <small>/ '+state.horizon+' 天</small>';
+      svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+      svg.innerHTML=`<defs><linearGradient id="predBand" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#8db5ff" stop-opacity=".36"/><stop offset="1" stop-color="#d0e4ff" stop-opacity=".13"/></linearGradient><linearGradient id="obsArea" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#53c7aa" stop-opacity=".16"/><stop offset="1" stop-color="#bff5e8" stop-opacity="0"/></linearGradient></defs>
+      ${marks}
+      <line x1="${x0}" y1="${y1}" x2="${x1}" y2="${y1}" stroke="#cbd6e2" stroke-width="1"/>
+      <line x1="${x0}" y1="${thresholdY}" x2="${x1}" y2="${thresholdY}" stroke="#f0b57a" stroke-dasharray="4 5" opacity=".75"/><text x="${x1}" y="${thresholdY-5}" text-anchor="end" fill="#daa065" font-size="9.5">演示阈值 ${m.threshold}</text>
+      <polygon points="${pts([[nx(0),y1],...hPoints,[nx(fidx),y1]])}" fill="url(#obsArea)"/>
+      <polygon points="${pts(area)}" fill="url(#predBand)"/>
+      <line x1="${nx(fidx)}" y1="${y0}" x2="${nx(fidx)}" y2="${y1}" stroke="#9eacc1" stroke-dasharray="5 5" stroke-width="1.2"/>
+      <text x="${nx(fidx)-8}" y="12" font-size="10" font-weight="750" text-anchor="end" fill="#209c85">历史观测</text><text x="${nx(fidx)+10}" y="12" font-size="10" font-weight="750" fill="#377bee">未来预测 →</text>
+      <polyline points="${pts(hPoints)}" fill="none" stroke="#20aa8d" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"/>
+      <polyline points="${pts(fPoints)}" fill="none" stroke="#3980ea" stroke-width="2.7" stroke-dasharray="6 5" stroke-linecap="round" stroke-linejoin="round"/>
+      ${tickDots}`;
+      svg.querySelectorAll('.chart-dot').forEach(dot=>{const i=Number(dot.dataset.index); const handler=(e)=>{
+        const tooltip=$('chartTooltip'),chartRect=$('chartWrap').getBoundingClientRect();const cx=nx(i)/W*chartRect.width,cy=ny(arr[i])/H*chartRect.height;
+        const value=rounded(arr[i],m.digits),role=i<=fidx?'历史示例':'预测示例';
+        tooltip.innerHTML=`${dateString(i-6)} · <em>${role}</em><br><strong>${value} ${m.unit}</strong>`;
+        tooltip.style.left=Math.max(68,Math.min(chartRect.width-68,cx))+'px';tooltip.style.top=Math.max(38,cy)+'px';tooltip.style.display='block';
+      };dot.addEventListener('mouseenter',handler);dot.addEventListener('click',handler);dot.addEventListener('mouseleave',()=>$('chartTooltip').style.display='none');});
+    }
+    function renderSparks(){
+      document.querySelectorAll('.driver').forEach((el,i)=>{const v=el.dataset.spark.split(',').map(Number),lo=Math.min(...v),hi=Math.max(...v),y=x=>26-(x-lo)/Math.max(.001,hi-lo)*21;
+        let p=v.map((x,j)=>`${j*100/(v.length-1)},${y(x)}`).join(' ');
+        const colors=['#20ae8b','#4e92e8','#3f8dec','#ad75e3','#937ce6','#32b6b1'];
+        el.querySelector('.spark').setAttribute('viewBox','0 0 100 30');el.querySelector('.spark').setAttribute('preserveAspectRatio','none');
+        el.querySelector('.spark').innerHTML=`<polyline points="${p}" fill="none" stroke="${colors[i]}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>`;
+      });
+    }
+    function setStation(station){if(!STATIONS[station])return;state.station=station;document.querySelectorAll('#stationStrip button').forEach(b=>b.classList.toggle('active',b.dataset.id===station));document.querySelectorAll('.map-point').forEach(el=>el.classList.toggle('active',el.dataset.station===station));
+      Object.entries(state.leafletMarkers).forEach(([key,layer])=>{const div=layer.getElement()?.querySelector('.live-marker');if(div)div.classList.toggle('selected',key===station);});
+      $('mapDetailLabel').textContent=STATIONS[station].name+' · +'+state.day+' 天 · 模拟'; renderChart();toast('已切换至 '+STATIONS[station].name+'（示意站点）');
+    }
+    function updateHeat(){
+      const d=state.day,boost=d/7, layer=state.layer;
+      const A=$('hotspotA'),B=$('hotspotB'),C=$('hotspotC');
+      const scale=layer==='temp'?.78:layer==='chl'?1.04:1;
+      A.setAttribute('rx', Math.round((150+boost*110)*scale));A.setAttribute('ry', Math.round((95+boost*65)*scale));
+      B.setAttribute('rx', Math.round((135+boost*75)*scale));B.setAttribute('ry', Math.round((83+boost*34)*scale));
+      C.setAttribute('rx',Math.round((108+boost*60)*scale));
+      $('offlineHeat').setAttribute('opacity',layer==='temp'?.69:1);
+      const mapText=layer==='risk'?'蓝藻风险等级':layer==='chl'?'叶绿素 a 相对水平':'表层水温相对水平';
+      $('mapLegendTitle').textContent=mapText+' · 模拟';
+      $('dayLabel').textContent=dateString(d).replace('/',' / ');
+      $('mapDetailLabel').textContent=STATIONS[state.station].name+' · '+dateString(d)+' · 演示 '+(d===0?'基准日':'+'+d+'天');
+      const risk=Math.min(.92,.64+d*.036+STATIONS[state.station].bias*.4);
+      $('riskValue').textContent=risk.toFixed(2);$('riskLevel').firstChild.textContent=risk>.8?'较高 ':risk>.55?'中等 ':'较低 ';
+      updateHeatOverlay();
+      Object.values(state.leafletMarkers).forEach(m=>m.setPopupContent(stationPopup(m._station)));
+    }
+    function playPause(){state.playing=!state.playing;$('playButton').innerHTML=icon(state.playing?'ic-pause':'ic-play');$('playButton').setAttribute('aria-label',state.playing?'暂停播放':'播放时间序列');
+      if(state.playing){if(state.day>=7){state.day=0;$('daySlider').value=0;updateHeat();}state.timer=setInterval(()=>{state.day++; if(state.day>7){state.day=0;state.playing=false;clearInterval(state.timer);$('playButton').innerHTML=icon('ic-play');} $('daySlider').value=state.day;updateHeat();},950);}else clearInterval(state.timer);
+    }
+    function zoomMap(delta){if(state.mapLoaded){state.leaflet.setZoom(state.leaflet.getZoom()+delta);}else{state.offlineZoom=Math.max(1,Math.min(1.8,state.offlineZoom+delta*.18));$('offline-svg').style.transform=`scale(${state.offlineZoom})`;}}
+    function downloadCSV(){const cols=['date','station','metric','stage','value','unit','is_demo'];const m=METRICS[state.metric],data=metricData(state.metric,state.station),values=data.hist.concat(data.fut.slice(0,state.horizon));
+      const lines=[cols.join(',')];values.forEach((v,i)=>lines.push([dateString(i-6),STATIONS[state.station].name,state.metric,i<=6?'historical_demo':'forecast_demo',rounded(v,m.digits),m.unit,true].join(',')));
+      const csv='\ufeff'+lines.join('\r\n');const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`Meicheng_Sanjiangkou_DEMO_${state.metric}_${state.horizon}d.csv`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),600);toast('已导出模拟数据 CSV');
+    }
+    // ======================= 天地图 WMTS 底图 + 自定义蓝藻预测图层 =======================
+    // 真实河道中线（经纬度）：按卫星影像逐段校准（Esri World Imagery z14），width 为近似水面宽（米）
+    const CHANNELS=[
+      {width:550,pts:[[29.53881,119.42396],[29.53807,119.45357],[29.53657,119.46859],[29.53433,119.48576],[29.53374,119.49863],[29.53359,119.50979]]},
+      {width:650,pts:[[29.45873,119.52267],[29.46934,119.52610],[29.48055,119.53125],[29.49176,119.53554],[29.50670,119.53812],[29.51790,119.53211],[29.52537,119.52353],[29.53060,119.51580],[29.53359,119.50979]]},
+      {width:600,pts:[[29.53359,119.50979],[29.53807,119.52009],[29.54180,119.53297],[29.54404,119.54670],[29.55524,119.55228],[29.56644,119.55872],[29.57390,119.56301],[29.58809,119.56902]]}
+    ];
+    // 演示风险热点：高斯衰减场，g 为逐日增长系数；位置均落在河道中线上
+    const HOTSPOTS=[
+      {lat:29.53359,lng:119.50979,base:.55,r:600,g:.055},
+      {lat:29.50670,lng:119.53812,base:.42,r:520,g:.04},
+      {lat:29.54404,lng:119.54670,base:.48,r:550,g:.06},
+      {lat:29.53657,lng:119.46859,base:.28,r:520,g:.03}
+    ];
+    const CENTER=[29.53359,119.50979];
+    const M_LAT=110940, M_LNG=111320*Math.cos(CENTER[0]*Math.PI/180);
+    const HEAT_BBOX={w:119.432,s:29.472,e:119.572,n:29.566}, HEAT_W=760;
+    const mXY=(lat,lng)=>[(lng-CENTER[1])*M_LNG,(lat-CENTER[0])*M_LAT];
+    const CH_SEGS=CHANNELS.map(c=>{const p=c.pts.map(q=>mXY(q[0],q[1])),segs=[];for(let i=0;i<p.length-1;i++)segs.push([p[i],p[i+1]]);return {half:c.width/2,segs};});
+    const HOT_M=HOTSPOTS.map(h=>({xy:mXY(h.lat,h.lng),base:h.base,sig:h.r/1.6,g:h.g}));
+    function segDist(x,y,a,b){const dx=b[0]-a[0],dy=b[1]-a[1],L2=dx*dx+dy*dy;let t=L2?((x-a[0])*dx+(y-a[1])*dy)/L2:0;t=Math.max(0,Math.min(1,t));const px=a[0]+t*dx-x,py=a[1]+t*dy-y;return Math.hypot(px,py);}
+    // 到水体的距离（米，负值=在水体内）；热力边缘羽化 110m，避免生硬边界
+    function waterDist(x,y){
+      let d=Math.hypot(x,y)-650;
+      for(const c of CH_SEGS){for(const sg of c.segs){const dd=segDist(x,y,sg[0],sg[1])-c.half;if(dd<d)d=dd;}}
+      return d;
+    }
+    function riskAtM(x,y,day,factor){let r=.05;for(const h of HOT_M){const dx=x-h.xy[0],dy=y-h.xy[1];r+=h.base*(1+h.g*day)*Math.exp(-(dx*dx+dy*dy)/(2*h.sig*h.sig));}return Math.min(1,r*factor);}
+    const riskAt=(lat,lng,day,factor)=>{const [x,y]=mXY(lat,lng);return riskAtM(x,y,day,factor);};
+    // 青绿 → 黄 → 橙 → 红 的风险色带（透明度随等级升高，卫星底图仍可见）
+    const RAMP=[[0,32,191,165,0],[.18,32,191,165,88],[.38,44,197,168,122],[.55,240,200,96,138],[.75,240,166,60,158],[1,232,101,88,172]];
+    function rampColor(r){for(let i=1;i<RAMP.length;i++){if(r<=RAMP[i][0]){const a=RAMP[i-1],b=RAMP[i],t=(r-a[0])/(b[0]-a[0]||1);return [a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t,a[3]+(b[3]-a[3])*t,a[4]+(b[4]-a[4])*t];}}return RAMP[RAMP.length-1].slice(1);}
+    function buildHeatURL(){
+      const factor=state.layer==='temp'?.8:state.layer==='chl'?.95:1, day=state.day;
+      const W=HEAT_W,H=Math.round(W*(HEAT_BBOX.n-HEAT_BBOX.s)*M_LAT/((HEAT_BBOX.e-HEAT_BBOX.w)*M_LNG));
+      // 水体距离场与日期无关，只算一次并缓存，拖动时间轴时热力秒级刷新
+      if(!state.wdCache||state.wdCache.W!==W||state.wdCache.H!==H){
+        const wdArr=new Float32Array(W*H);
+        for(let py=0;py<H;py++){const lat=HEAT_BBOX.n-(py+.5)/H*(HEAT_BBOX.n-HEAT_BBOX.s);
+          for(let px=0;px<W;px++){const lng=HEAT_BBOX.w+(px+.5)/W*(HEAT_BBOX.e-HEAT_BBOX.w);
+            const [x,y]=mXY(lat,lng);wdArr[py*W+px]=waterDist(x,y);}}
+        state.wdCache={W,H,wd:wdArr};
+      }
+      const wdArr=state.wdCache.wd;
+      const cv=document.createElement('canvas');cv.width=W;cv.height=H;const ctx=cv.getContext('2d');
+      const img=ctx.createImageData(W,H),d=img.data;
+      for(let py=0;py<H;py++){const lat=HEAT_BBOX.n-(py+.5)/H*(HEAT_BBOX.n-HEAT_BBOX.s);
+        for(let px=0;px<W;px++){const wd=wdArr[py*W+px];if(wd>110)continue;
+          const lng=HEAT_BBOX.w+(px+.5)/W*(HEAT_BBOX.e-HEAT_BBOX.w);
+          const [x,y]=mXY(lat,lng);
+          const c=rampColor(riskAtM(x,y,day,factor)),o=(py*W+px)*4,feather=wd<=0?1:1-wd/110;
+          d[o]=c[0];d[o+1]=c[1];d[o+2]=c[2];d[o+3]=Math.round(c[3]*feather);}}
+      ctx.putImageData(img,0,0);return cv.toDataURL('image/png');
+    }
+    function updateHeatOverlay(){
+      if(!state.leaflet)return;
+      const url=buildHeatURL(),b=[[HEAT_BBOX.s,HEAT_BBOX.w],[HEAT_BBOX.n,HEAT_BBOX.e]];
+      if(state.heat)state.heat.setUrl(url);else state.heat=L.imageOverlay(url,b,{interactive:false}).addTo(state.leaflet);
+    }
+    function riskLevel(r){return r>=.75?['高','#e86558']:r>=.55?['较高','#f0a63c']:r>=.35?['中','#f0c860']:r>=.2?['较低','#2cc5a8']:['低','#20bf9f'];}
+    function stationPopup(s){
+      const r=riskAt(s.lat,s.lng,state.day,1),[lv,lc]=riskLevel(r);
+      const chl=(s.chl*(1+.012*state.day)).toFixed(1);
+      const timeDesc=state.day===0?'基准日观测':'未来 '+state.day+' 天预测';
+      return `<div class="sp-head"><div class="sp-name">${s.name}断面</div><div class="sp-sub">${dateString(state.day).replace('/','.')} · ${timeDesc} · 演示</div></div><div class="sp-rows">`+
+        `<div class="sp-row"><span class="k">叶绿素 a<small>μg/L</small></span><span class="v">${chl}</span></div>`+
+        `<div class="sp-row"><span class="k">水温<small>°C</small></span><span class="v">${s.temp.toFixed(1)}</span></div>`+
+        `<div class="sp-row"><span class="k">pH<small>无量纲</small></span><span class="v">${s.ph.toFixed(1)}</span></div>`+
+        `<div class="sp-row"><span class="k">溶解氧<small>mg/L</small></span><span class="v">${s.dox.toFixed(1)}</span></div>`+
+        `<div class="sp-row"><span class="k">蓝藻风险<small>等级 · 概率</small></span><span class="v sp-risk"><i style="background:${lc}"></i>${lv} · ${r.toFixed(2)}</span></div></div>`;
+    }
+    // 天地图 WMTS 服务：卫星 img_w+cia_w / 标准 vec_w+cva_w；t0–t7 负载均衡
+    function tdtLayer(layer){
+      return L.tileLayer(`https://t{s}.tianditu.gov.cn/${layer}_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=${layer}&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TDT_KEY}`,
+        {subdomains:['0','1','2','3','4','5','6','7'],maxZoom:18,minZoom:9,attribution:'© 天地图'});
+    }
+    function setBasemap(kind){
+      if(!state.leaflet)return;
+      state.basemap=kind;state.mapLoaded=false;$('leaflet-map').style.visibility='hidden';
+      $('swSat').classList.toggle('active',kind==='sat');$('swVec').classList.toggle('active',kind==='vec');
+      if(state.baseLayers){state.baseLayers.forEach(l=>{try{state.leaflet.removeLayer(l);}catch(e){}});}
+      state.baseLayers=[];
+      // 开发校准：URL 加 ?basemap=esri 或 ?basemap=osm 可临时用免 Key 底图核对预测图层与河道对齐，界面对用户不暴露
+      const dev=/[?&]basemap=(esri|osm)/.exec(location.search);
+      if(dev){
+        const t=dev[1]==='esri'
+          ?L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{attribution:'© Esri World Imagery',maxZoom:18,minZoom:9})
+          :L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap',maxZoom:18,minZoom:9});
+        t.on('tileload',()=>{if(state.mapLoaded)return;state.mapLoaded=true;$('leaflet-map').style.visibility='visible';$('mapMode').textContent=(dev[1]==='esri'?'Esri 卫星':'OSM')+' 开发校准底图 · 交付时使用天地图';state.leaflet.invalidateSize();});
+        t.addTo(state.leaflet);state.baseLayers.push(t);return;
+      }
+      if(!TDT_KEY){$('mapMode').textContent='水系示意图 · 非测绘底图';return;}
+      state.tdtErrors=0;
+      const base=tdtLayer(kind==='sat'?'img':'vec'),anno=tdtLayer(kind==='sat'?'cia':'cva');
+      base.on('tileload',()=>{if(state.mapLoaded)return;state.mapLoaded=true;$('leaflet-map').style.visibility='visible';$('mapMode').textContent=(kind==='sat'?'天地图卫星影像':'天地图标准地图')+' · CGCS2000 · 预测图层为演示';state.leaflet.invalidateSize();});
+      base.on('tileerror',()=>{state.tdtErrors++;if(state.tdtErrors>=8)$('mapMode').textContent='水系示意图 · 底图服务连接失败';});
+      base.addTo(state.leaflet);anno.addTo(state.leaflet);state.baseLayers.push(base,anno);
+    }
+    function initLeaflet(){
+      if(!window.L)return;
+      try {
+        const map=L.map('leaflet-map',{zoomControl:false, attributionControl:true,preferCanvas:true,scrollWheelZoom:false}).setView(CENTER,12);
+        state.leaflet=map;
+        setBasemap('sat');
+        Object.entries(STATIONS).forEach(([key,s])=>{
+          const marker=L.marker([s.lat,s.lng],{icon:L.divIcon({className:'',html:`<div class="live-marker ${s.core?'core':''} ${key===state.station?'selected':''}"></div>`,iconSize:[17,17],iconAnchor:[8,8]}),zIndexOffset:600}).addTo(map);
+          marker._station=s;
+          marker.bindPopup(stationPopup(s),{className:'station-popup',maxWidth:270,offset:[0,-4]});
+          marker.bindTooltip(s.name+' · 点击查看断面数据',{direction:'top'});
+          marker.on('click',()=>setStation(key));state.leafletMarkers[key]=marker;
+        });
+        try{updateHeatOverlay();}catch(err){console.warn('预测热力图层生成失败：',err);}
+      } catch(err) {console.warn('Leaflet 初始化未完成，继续使用离线水系示意图。',err);}
+    }
+    function setup(){
+      renderChart(); renderSparks();updateHeat();
+      $('metricSelect').addEventListener('change',e=>{state.metric=e.target.value;renderChart();});
+      $('mapLayer').addEventListener('change',e=>{state.layer=e.target.value;updateHeat();});
+      document.querySelectorAll('[data-horizon]').forEach(btn=>btn.addEventListener('click',()=>{state.horizon=Number(btn.dataset.horizon);document.querySelectorAll('[data-horizon]').forEach(x=>x.classList.toggle('active',x===btn));renderChart();}));
+      $('daySlider').addEventListener('input',e=>{state.day=Number(e.target.value);updateHeat();});
+      $('playButton').addEventListener('click',playPause);
+      document.querySelectorAll('#stationStrip button').forEach(btn=>btn.addEventListener('click',()=>setStation(btn.dataset.id)));
+      document.querySelectorAll('.map-point').forEach(el=>{el.addEventListener('click',()=>setStation(el.dataset.station));el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();setStation(el.dataset.station);}});});
+      $('swSat').addEventListener('click',()=>setBasemap('sat'));
+      $('swVec').addEventListener('click',()=>setBasemap('vec'));
+      $('zoomIn').addEventListener('click',()=>zoomMap(1));$('zoomOut').addEventListener('click',()=>zoomMap(-1));$('resetMap').addEventListener('click',()=>{state.offlineZoom=1;$('offline-svg').style.transform='scale(1)';if(state.mapLoaded)state.leaflet.setView(CENTER,12);toast('已定位至梅城三江口附近');});
+      $('exportBtn').addEventListener('click',downloadCSV);
+      $('aboutBtn').addEventListener('click',()=>toast('本页面为学生设计参考，所有预测值均为模拟数据。地图定位：建德梅城三江口。'));
+      document.querySelectorAll('[data-alert]').forEach(btn=>btn.addEventListener('click',()=>{$(btn.dataset.alert).classList.toggle('is-open');btn.textContent=$(btn.dataset.alert).classList.contains('is-open')?'⌃':'⌄';}));
+      document.querySelectorAll('.nav [data-scroll]').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b===btn));$(btn.dataset.scroll).scrollIntoView({behavior:'smooth',block:'start'});}));
+      setTimeout(initLeaflet,10);
+      window.addEventListener('resize',()=>{renderChart();if(state.mapLoaded)state.leaflet.invalidateSize();});
+    }
+    document.addEventListener('DOMContentLoaded',setup);
+  </script>
+</body>
+</html>
