@@ -4,15 +4,16 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#f7f9fc" />
-  <meta name="description" content="梅城三江口蓝藻风险预测平台交互原型。研究演示数据，非真实水质监测或风险预报。" />
+  <meta name="description" content="梅城三江口蓝藻浓度预测平台。RSI 模型 2026 年 9 月回测数据，站间热力为沿河道插值示意，非实时预报。" />
   <title>蓝藻智测 · 梅城三江口预测平台 | 前端设计原型</title>
   <!--
     蓝藻预测 Web UI · 交付学生的单文件设计原型
     地区：浙江省建德市梅城镇三江口（新安江 + 兰江 → 富春江）
-    所有风险值、站点位置、曲线、热力范围均为 UI 演示数据，不是实测/正式模型输出。
-    单文件可离线打开；联网时在脚本顶部 TDT_KEY 常量填入天地图浏览器端 Key，即通过 Leaflet + 天地图 WMTS 显示卫星/标准真实底图。
-    蓝藻预测图层按真实河道中线（CHANNELS）逐像素生成，与底图坐标对齐；站点弹窗、预测时刻滑杆（0–7 天）联动。
-    后续接入真实数据时，重点替换：DEMO / STATIONS / HOTSPOTS / data-loader。
+    数据：页面打开时读取 web_data/ 下的 CSV（stations / observed_daily / forecast_rsi），需经 serve.ps1（http://localhost:8000）访问。
+      · forecast_rsi.csv：RSI-H1（T+1）与 RSI-H3（T+2、T+3，含 q10/q90）预测，由 tools/build_web_data.ps1 从两份对比报告生成，可直接编辑。
+      · observed_daily.csv：各站日最高蓝藻浓度实测；stations.csv：站点坐标（当前为估计值）。
+    地图热力 = 各站 RSI 预测值沿河网距离反距离插值，仅为空间示意，不是模型栅格输出。
+    天地图 Key 由 serve.ps1 从 .env 注入替换 __TDT_KEY__。
   -->
   <link rel="preconnect" href="https://unpkg.com" />
   <link rel="preconnect" href="https://tile.openstreetmap.org" />
@@ -112,7 +113,7 @@
     .map-tools .split {height:1px;background:#ecf0f2;margin:2px 4px;}
     .map-legend {right:14px;bottom:14px;padding:10px 12px;min-width:178px;pointer-events:none;}
     .legend-title {font-weight:750;color:#516477;font-size:10px;margin-bottom:7px;}
-    .colorbar {height:7px;border-radius:99px;background:linear-gradient(90deg,#32bfa5 0%,#a4dca1 27%,#e6dc5b 52%,#f7a64d 75%,#eb6462 100%);}
+    .colorbar {height:7px;border-radius:99px;background:linear-gradient(90deg,#5fd0bb 0%,#2cc5a8 25%,#f0c860 50%,#f0a63c 75%,#e86558 100%);}
     .legend-labels {display:flex;justify-content:space-between;margin-top:6px;font-size:9px;color:#9aabb6;}
     .map-station-label {font-family: inherit; fill:#526e7b; font-size:13px; font-weight:740;paint-order:stroke; stroke:#fff; stroke-width:4px; stroke-linejoin:round;}
     .map-river-label {font-family:inherit;fill:#277b9a;font-weight:750;font-size:17px;letter-spacing:6px;paint-order:stroke;stroke:#e5f6fb;stroke-width:4px;}
@@ -137,7 +138,7 @@
     .forecast-top {display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:13px;}
     .forecast-top .name {font-weight:740;font-size:14px;}
     .forecast-top .unit {font-size:11px;color:#9ba9b9;}
-    .legend-inline {display:flex;align-items:center;gap:15px;color:#8698aa;font-size:10px;margin-bottom:8px;justify-content:flex-end;}
+    .legend-inline {display:flex;flex-wrap:wrap;align-items:center;gap:6px 15px;color:#8698aa;font-size:10px;margin-bottom:8px;justify-content:flex-end;}
     .legend-inline span {display:flex;align-items:center;gap:6px;white-space:nowrap;}
     .line-key {width:17px;height:3px;border-radius:9px;background:#20aa8b;}
     .line-key.future {background:#3b7ded;}
@@ -211,6 +212,22 @@
     .sp-row .v {font-weight:780;color:#24435c;font-variant-numeric:tabular-nums;}
     .sp-risk {display:inline-flex;align-items:center;gap:5px;font-weight:780;}
     .sp-risk i {width:8px;height:8px;border-radius:50%;display:inline-block;}
+    .sp-note {padding:0 14px 10px;font-size:9px;color:#a7b4bf;line-height:1.5;}
+    .base-btn {display:inline-flex;align-items:center;gap:6px;padding:6px 11px;font-size:11px;font-weight:650;border:1px solid rgba(57,122,244,.32);border-radius:8px;color:#2d6fd6;background:rgba(255,255,255,.85);transition:all .16s;}
+    .base-btn strong {font-weight:780;font-variant-numeric:tabular-nums;}
+    .base-btn:hover {background:#fff;box-shadow:0 3px 10px rgba(45,90,160,.1);}
+    .cal-pop {position:absolute;z-index:4000;width:262px;padding:13px 13px 11px;background:#fff;border:1px solid #e3eaf2;border-radius:15px;box-shadow:0 16px 44px rgba(27,52,81,.16);}
+    .cal-pop[hidden] {display:none;}
+    .cal-head {display:flex;justify-content:space-between;align-items:baseline;font-size:12px;font-weight:760;color:#24435c;margin:0 2px 9px;}
+    .cal-head small {font-size:10px;color:#9aa8b6;font-weight:600;}
+    .cal-grid {display:grid;grid-template-columns:repeat(7,1fr);gap:3px;}
+    .cal-grid .cal-w {font-size:9.5px;color:#a3afbd;text-align:center;padding:3px 0;font-weight:650;}
+    .cal-grid button {border:0;background:#f6f9fc;color:#3d5670;border-radius:8px;height:30px;font-size:11px;font-weight:680;font-variant-numeric:tabular-nums;}
+    .cal-grid button:hover:not(:disabled) {background:#e8f1ff;color:#2465dc;}
+    .cal-grid button.sel {background:linear-gradient(115deg,#20ad9e,#397af4);color:#fff;}
+    .cal-grid button:disabled {background:transparent;color:#cdd5de;cursor:not-allowed;text-decoration:line-through;}
+    .cal-foot {margin-top:9px;font-size:9.5px;color:#a3afbd;line-height:1.5;}
+    .act-key {width:8px;height:8px;border:2px solid #20aa8d;border-radius:50%;background:#fff;}
     .toast { position:fixed; z-index:5000; right:28px; bottom:28px; background:#1b3451; color:#fff; border-radius:11px; padding:12px 16px; font-size:12px; box-shadow:0 8px 28px #1b345140; opacity:0; pointer-events:none; transform:translateY(12px); transition:all .25s; }
     .toast.show {opacity:1;transform:translateY(0);}
     @media(max-width:1220px) {
@@ -289,7 +306,7 @@
         <button data-scroll="datasources">数据来源</button>
       </nav>
       <div class="top-actions">
-        <span class="demo-pill" title="当前展示均为模拟数据">UI 原型 · 模拟数据</span>
+        <span class="demo-pill" title="预测值读取自 web_data/forecast_rsi.csv，为 2026 年 9 月回测结果">RSI 回测 · 2026-09</span>
         <button class="icon-btn" id="aboutBtn" title="关于原型" aria-label="关于原型"><svg class="icon"><use href="#ic-info"/></svg></button>
       </div>
     </div>
@@ -300,23 +317,23 @@
       <div class="eyebrow">WATERSHED INTELLIGENCE · QIANTANG RIVER BASIN</div>
       <h1 id="hero-title">让蓝藻风险，在三江汇流处被提前看见。</h1>
       <p>聚焦千岛湖下游的新安江、兰江与富春江交汇水域，融合遥感、水文、气象及监测序列，探索河流型水域蓝藻风险的时空预测。</p>
-      <div class="hero-meta"><span><i class="dot"></i> 浙江 · 建德梅城</span><span>新安江 + 兰江 → 富春江</span><span>示例基准日：2026.08.12</span></div>
-      <div class="hero-right"><span class="region">MEICHENG · SANJIANG CONFLUENCE</span><span class="coords">29.54° N · 119.50° E (梅城镇参考坐标)</span></div>
+      <div class="hero-meta"><span><i class="dot"></i> 浙江 · 建德梅城</span><span>新安江 + 兰江 → 富春江</span><button type="button" class="base-btn" id="baseBtn" aria-haspopup="dialog" aria-expanded="false" aria-controls="calPop">基准日：<strong id="baseLabel">—</strong> ▾</button></div>
+      <div class="hero-right"><span class="region">MEICHENG · SANJIANG CONFLUENCE</span><span class="coords">29.53° N · 119.52° E (三江汇流点)</span></div>
     </section>
+    <div class="cal-pop" id="calPop" role="dialog" aria-label="选择基准日" hidden><div class="cal-head">2026 年 9 月<small>可选 1–27 日</small></div><div class="cal-grid" id="calGrid"></div><div class="cal-foot">基准日 T 为预测起点：T+1 取 RSI-H1，T+2 / T+3 取 RSI-H3。</div></div>
 
     <section class="kpis" aria-label="风险摘要">
-      <article class="card kpi kpi-risk"><div class="kpi-main"><div class="kpi-label">核心断面风险</div><div class="value" id="riskLevel">中等 <small id="riskValue">0.64</small></div><div class="foot">蓝藻发生概率 · 模拟</div></div><span class="kpi-icon"><svg class="icon"><use href="#ic-target"/></svg></span></article>
-      <article class="card kpi kpi-trend"><div class="kpi-main"><div class="kpi-label">未来 72 小时趋势</div><div class="value">+17.8<small>%</small></div><div class="foot">相对当前基准情景</div></div><span class="kpi-icon"><svg class="icon"><use href="#ic-chart"/></svg></span></article>
+      <article class="card kpi kpi-risk"><div class="kpi-main"><div class="kpi-label">所选站点预测浓度</div><div class="value" id="riskLevel">—</div><div class="foot" id="riskFoot">蓝藻日最大值 · RSI</div></div><span class="kpi-icon"><svg class="icon"><use href="#ic-target"/></svg></span></article>
+      <article class="card kpi kpi-trend"><div class="kpi-main"><div class="kpi-label">未来 3 天趋势</div><div class="value" id="trendVal">—</div><div class="foot" id="trendFoot">T+3 预测 vs 基准日实测</div></div><span class="kpi-icon"><svg class="icon"><use href="#ic-chart"/></svg></span></article>
       <article class="card kpi kpi-point"><div class="kpi-main"><div class="kpi-label">重点研究区域</div><div class="value" style="font-size:24px;letter-spacing:-.8px">三江口</div><div class="foot">梅城 · 汇流至下游河段</div></div><span class="kpi-icon"><svg class="icon"><use href="#ic-pin"/></svg></span></article>
-      <article class="card kpi kpi-horizon"><div class="kpi-main"><div class="kpi-label">预测时间窗口</div><div class="value" id="horizonKpi">7<small>天</small></div><div class="foot">支持切换至 14 天演示</div></div><span class="kpi-icon"><svg class="icon"><use href="#ic-clock"/></svg></span></article>
+      <article class="card kpi kpi-horizon"><div class="kpi-main"><div class="kpi-label">预测时间窗口</div><div class="value" id="horizonKpi">3<small>天</small></div><div class="foot">可切换未来 1 天 / 3 天</div></div><span class="kpi-icon"><svg class="icon"><use href="#ic-clock"/></svg></span></article>
     </section>
 
-    <div class="section-row"><h2>流域时空态势</h2><p>研究展示原型 / 数据非实时 / 风险图层仅作视觉演示</p></div>
+    <div class="section-row"><h2>流域时空态势</h2><p>RSI 回测数据 · 2026 年 9 月 / 非实时 / 站间热力为沿河道插值示意</p></div>
     <section class="main-grid" aria-label="地图与时间序列预测">
       <article class="card panel" id="riskmap">
         <div class="panel-head">
-          <div class="panel-title"><span class="h-icon"><svg class="icon"><use href="#ic-layers"/></svg></span><div><h3>三江口蓝藻风险空间分布</h3><p>新安江 · 兰江 · 富春江 / 演示分区</p></div></div>
-          <div class="head-controls"><select id="mapLayer" class="soft-select" aria-label="地图变量"><option value="risk">蓝藻风险</option><option value="chl">叶绿素 a</option><option value="temp">表层水温</option></select></div>
+          <div class="panel-title"><span class="h-icon"><svg class="icon"><use href="#ic-layers"/></svg></span><div><h3>三江口蓝藻浓度空间分布</h3><p>RSI 预测 · 4 个监测站 · 沿河道插值示意</p></div></div>
         </div>
         <div class="map-body" id="mapContainer">
           <!-- 离线水系示意图：流向结构符合梅城三江口地理事实，不代表测绘边界 -->
@@ -342,49 +359,49 @@
                 <path d="M-65 282C110 241 215 305 342 287S449 321 515 333" stroke="#f7fcfa" stroke-width="88"/><path d="M360 628C368 540 412 483 423 432S458 361 515 333" stroke="#f7fcfa" stroke-width="90"/><path d="M515 333C592 297 597 244 673 218S766 133 853 118S921 101 1020 41" stroke="#f7fcfa" stroke-width="102"/>
                 <path d="M-65 282C110 241 215 305 342 287S449 321 515 333" stroke="url(#water)" stroke-width="76"/><path d="M360 628C368 540 412 483 423 432S458 361 515 333" stroke="url(#water)" stroke-width="78"/><path d="M515 333C592 297 597 244 673 218S766 133 853 118S921 101 1020 41" stroke="url(#water)" stroke-width="90"/>
               </g>
-              <g id="offlineHeat" mask="url(#riverMask)" filter="url(#softBlur)"><ellipse id="hotspotA" cx="531" cy="322" rx="195" ry="125" fill="url(#heatRed)"/><ellipse id="hotspotB" cx="758" cy="166" rx="176" ry="114" fill="url(#heatYellow)"/><ellipse id="hotspotC" cx="421" cy="434" rx="128" ry="163" fill="url(#heatGreen)"/></g>
+              <g id="offlineHeat" mask="url(#riverMask)"></g>
               <g opacity=".48" stroke="#f1fdff" fill="none" stroke-width="2" stroke-linecap="round"><path d="M2 278C112 252 223 298 327 287"/><path d="M385 555C381 498 429 412 454 389"/><path d="M596 279Q663 206 758 156"/></g>
               <!-- 河名与区域名 -->
               <text x="189" y="249" transform="rotate(6 189 249)" class="map-river-label">新安江</text><text x="319" y="478" transform="rotate(-62 319 478)" class="map-river-label">兰江</text><text x="743" y="115" transform="rotate(-33 743 115)" class="map-river-label">富春江</text>
               <g font-size="13" fill="#839b9b" font-weight="700"><text x="460" y="157">梅城古镇</text><text x="192" y="113">杨村桥方向</text><text x="810" y="347">三都方向</text><text x="148" y="483">大洋方向</text></g>
               <g transform="translate(558 322)"><rect x="-65" y="-42" width="126" height="31" rx="10" fill="#fff" opacity=".92"/><text x="-53" y="-22" fill="#3b6978" font-size="14" font-weight="760">梅城三江口</text><path d="M-8 -10 0 12 11-10" fill="#fff" opacity=".92"/></g>
-              <g class="map-point" data-station="xin" transform="translate(277 286)" tabindex="0" role="button" aria-label="查看新安江上游示意点"><circle class="pin-shadow" r="17"/><circle class="pin-main" r="10"/><circle class="pin-center" r="4"/><text class="map-station-label" x="-42" y="-23">新安江</text></g>
-              <g class="map-point" data-station="lan" transform="translate(403 485)" tabindex="0" role="button" aria-label="查看兰江入汇示意点"><circle class="pin-shadow" r="17"/><circle class="pin-main" r="10"/><circle class="pin-center" r="4"/><text class="map-station-label" x="19" y="4">兰江</text></g>
-              <g class="map-point active" data-station="mix" transform="translate(530 338)" tabindex="0" role="button" aria-label="查看三江口核心示意点"><circle class="pin-shadow" r="19"/><circle class="pin-main" r="11"/><circle class="pin-center" r="4"/></g>
-              <g class="map-point" data-station="fuchun" transform="translate(750 168)" tabindex="0" role="button" aria-label="查看富春江下游示意点"><circle class="pin-shadow" r="17"/><circle class="pin-main" r="10"/><circle class="pin-center" r="4"/><text class="map-station-label" x="18" y="6">下游</text></g>
+              <g class="map-point" data-station="meichengmatou" transform="translate(442 311)" tabindex="0" role="button" aria-label="查看梅城码头站"><circle class="pin-shadow" r="17"/><circle class="pin-main" r="10"/><circle class="pin-center" r="4"/><text class="map-station-label" x="-58" y="-21">梅城码头</text></g>
+              <g class="map-point" data-station="jiangjunyan" transform="translate(374 540)" tabindex="0" role="button" aria-label="查看将军岩站"><circle class="pin-shadow" r="17"/><circle class="pin-main" r="10"/><circle class="pin-center" r="4"/><text class="map-station-label" x="19" y="5">将军岩</text></g>
+              <g class="map-point" data-station="yanlingwu" transform="translate(800 127)" tabindex="0" role="button" aria-label="查看严陵坞站"><circle class="pin-shadow" r="17"/><circle class="pin-main" r="10"/><circle class="pin-center" r="4"/><text class="map-station-label" x="-22" y="34">严陵坞</text></g>
+              <g class="map-point" data-station="yanziling" transform="translate(892 97)" tabindex="0" role="button" aria-label="查看严子陵站"><circle class="pin-shadow" r="17"/><circle class="pin-main" r="10"/><circle class="pin-center" r="4"/><text class="map-station-label" x="-24" y="-20">严子陵</text></g>
               <g transform="translate(55 521)" font-weight="700" fill="#7e9a9b" font-size="12"><path d="M0 14V-5M0-5l-7 10h14Z" fill="#6da69a"/><text x="-4" y="-12">N</text></g>
             </svg>
           </div>
           <div id="leaflet-map" aria-label="联网地图：建德梅城三江口"></div>
-          <div class="map-float map-location"><div class="a"><span></span> 梅城 · 三江汇流区</div><div class="b" id="mapDetailLabel">基准日 · 08/12 · 模拟风险</div></div>
+          <div class="map-float map-location"><div class="a"><span></span> 梅城 · 三江汇流区</div><div class="b" id="mapDetailLabel">数据读取中…</div></div>
           <div class="map-float map-switch" role="group" aria-label="底图切换"><button type="button" id="swSat" class="active">卫星影像</button><button type="button" id="swVec">标准地图</button></div>
-          <div class="map-float map-tools" aria-label="地图控制"><button type="button" id="zoomIn" title="放大地图" aria-label="放大地图">+</button><button type="button" id="zoomOut" title="缩小地图" aria-label="缩小地图">−</button><div class="split"></div><button type="button" id="resetMap" title="回到梅城三江口" aria-label="回到梅城三江口"><svg class="icon" style="width:15px;height:15px"><use href="#ic-target"/></svg></button></div>
-          <div class="map-float map-legend"><div class="legend-title" id="mapLegendTitle">蓝藻风险等级 · 模拟</div><div class="colorbar"></div><div class="legend-labels"><span>低</span><span>较低</span><span>中</span><span>较高</span><span>高</span></div></div>
+          <div class="map-float map-tools" aria-label="地图控制"><button type="button" id="zoomIn" title="放大地图" aria-label="放大地图">+</button><button type="button" id="zoomOut" title="缩小地图" aria-label="缩小地图">−</button><div class="split"></div><button type="button" id="resetMap" title="显示全部测站" aria-label="显示全部测站"><svg class="icon" style="width:15px;height:15px"><use href="#ic-target"/></svg></button></div>
+          <div class="map-float map-legend"><div class="legend-title" id="mapLegendTitle">蓝藻浓度预测（RSI）· μg/L</div><div class="colorbar"></div><div class="legend-labels"><span>0</span><span>5</span><span>10</span><span>15</span><span>≥20</span></div></div>
           <div class="watermark" id="mapMode">水系示意图 · 非测绘底图</div>
         </div>
         <div class="map-bottom">
-          <button class="play" id="playButton" type="button" title="播放未来7天的模拟风险变化" aria-label="播放时间序列"><svg class="icon"><use href="#ic-play"/></svg></button>
-          <div class="slider-wrap"><div style="min-width:0; flex:1"><span class="tiny">风险演变时间轴 · 2026 年 8 月演示情景</span><input id="daySlider" type="range" class="time-slider" min="0" max="7" value="0" aria-label="选择预测天数" /></div><span class="date-chip" id="dayLabel">08 / 12</span></div>
+          <button class="play" id="playButton" type="button" title="播放未来 1–3 天的 RSI 预测变化" aria-label="播放时间序列"><svg class="icon"><use href="#ic-play"/></svg></button>
+          <div class="slider-wrap"><div style="min-width:0; flex:1"><span class="tiny">风险演变时间轴 · 未来 3 天（T+1 RSI-H1 · T+2/T+3 RSI-H3）</span><input id="daySlider" type="range" class="time-slider" min="1" max="3" value="1" aria-label="选择预测天数" /></div><span class="date-chip" id="dayLabel">—</span></div>
         </div>
-        <div class="map-bottom" style="border-top:1px solid #f2f4f7;min-height:53px;padding-top:9px;padding-bottom:11px"><span style="font-size:10px;color:#9aabb7;white-space:nowrap">河段切换</span><div class="station-strip" id="stationStrip"><button data-id="xin">新安江来水</button><button data-id="lan">兰江来水</button><button data-id="mix" class="active">三江口核心</button><button data-id="fuchun">富春江下游</button></div></div>
-        <div class="map-footer-note">空间热点、河段点位与风险值均为示意；真实业务需接入水体边界、监测站坐标及模型栅格预测结果。</div>
+        <div class="map-bottom" style="border-top:1px solid #f2f4f7;min-height:53px;padding-top:9px;padding-bottom:11px"><span style="font-size:10px;color:#9aabb7;white-space:nowrap">测站切换</span><div class="station-strip" id="stationStrip"></div></div>
+        <div class="map-footer-note">热力为各测站 RSI 预测值沿河道距离插值的空间示意，非模型栅格输出；站点坐标为按影像估计的位置，可在 web_data/stations.csv 中修改。</div>
       </article>
 
       <article class="card panel" id="forecast">
         <div class="panel-head">
-          <div class="panel-title"><span class="h-icon"><svg class="icon"><use href="#ic-chart"/></svg></span><div><h3>关键水质指标时序预测</h3><p id="stationNameHeader">三江口核心断面 / 研究演示</p></div></div>
-          <div class="head-controls"><select id="metricSelect" class="soft-select" aria-label="选择预测变量"><option value="chl">叶绿素 a</option><option value="phyco">藻蓝蛋白</option><option value="risk">蓝藻风险</option><option value="temp">水温</option></select><div class="segment" aria-label="预测时间范围"><button class="active" data-horizon="7">7 天</button><button data-horizon="14">14 天</button></div></div>
+          <div class="panel-title"><span class="h-icon"><svg class="icon"><use href="#ic-chart"/></svg></span><div><h3>关键水质指标时序预测</h3><p id="stationNameHeader">—</p></div></div>
+          <div class="head-controls"><div class="segment" aria-label="预测时间范围"><button data-horizon="1">1 天</button><button class="active" data-horizon="3">3 天</button></div></div>
         </div>
         <div class="forecast-body">
-          <div class="forecast-top"><span class="name" id="metricLabel">叶绿素 a 浓度预测</span><span class="unit" id="metricUnit">μg/L</span></div>
-          <div class="legend-inline"><span><i class="line-key"></i> 历史示例</span><span><i class="line-key future"></i> 未来预测示例</span><span><i class="band-key"></i> 模拟预测区间</span></div>
-          <div class="chart-wrap" id="chartWrap"><svg id="forecast-chart" role="img" aria-label="历史时间序列、未来预测和不确定性带的交互图表" viewBox="0 0 600 270" preserveAspectRatio="none"></svg><div class="chart-tooltip" id="chartTooltip"></div></div>
-          <div class="chart-note"><span>预测起点：<strong>2026.08.12</strong>　|　虚线后为预测值</span><span>点击或悬停节点查看数值</span></div>
+          <div class="forecast-top"><span class="name" id="metricLabel">蓝藻浓度预测（日最大值）</span><span class="unit" id="metricUnit">μg/L</span></div>
+          <div class="legend-inline"><span><i class="line-key"></i> 历史实测</span><span><i class="line-key future"></i> RSI 预测</span><span><i class="band-key"></i> q10–q90 区间（H3）</span><span><i class="act-key"></i> 实测（回测）</span></div>
+          <div class="chart-wrap" id="chartWrap"><svg id="forecast-chart" role="img" aria-label="蓝藻浓度历史实测、RSI 预测与预测区间图表" viewBox="0 0 600 270" preserveAspectRatio="none"></svg><div class="chart-tooltip" id="chartTooltip"></div></div>
+          <div class="chart-note"><span>预测起点：<strong id="baseNote">—</strong>　|　虚线后为 RSI 预测</span><span>点击或悬停查看数值</span></div>
         </div>
-        <div class="forecast-insights" aria-label="预测摘要（演示数据）">
-          <div class="insight"><div class="s-title">预测窗口内峰值</div><div class="s-value" id="peakVal">—</div><div class="s-foot" id="peakDate">预测结果示意</div></div>
-          <div class="insight"><div class="s-title">超出演示阈值天数</div><div class="s-value" id="overDays">—</div><div class="s-foot">非实际预警标准</div></div>
-          <div class="insight"><div class="s-title">结果属性</div><div class="s-value" style="font-size:17px;color:#1ca58d">Scenario</div><div class="s-foot">示意预测 · 非实测</div></div>
+        <div class="forecast-insights" aria-label="预测摘要">
+          <div class="insight"><div class="s-title">预测窗口内峰值</div><div class="s-value" id="peakVal">—</div><div class="s-foot" id="peakDate">—</div></div>
+          <div class="insight"><div class="s-title">超出演示阈值天数</div><div class="s-value" id="overDays">—</div><div class="s-foot">阈值 10 μg/L · 非实际预警标准</div></div>
+          <div class="insight"><div class="s-title">窗口内回测 MAE</div><div class="s-value" id="maeVal" style="color:#1ca58d">—</div><div class="s-foot" id="maeFoot">RSI 预测 vs 实测</div></div>
         </div>
       </article>
     </section>
@@ -416,81 +433,128 @@
       <div class="data-item"><span class="d-icon"><svg class="icon"><use href="#ic-wave"/></svg></span><div><h4>水文站点</h4><p>流量 / 水位 / 调度</p></div></div>
       <div class="data-item"><span class="d-icon"><svg class="icon"><use href="#ic-cloud"/></svg></span><div><h4>气象再分析</h4><p>气温 / 风 / 降水</p></div></div>
       <div class="data-item"><span class="d-icon"><svg class="icon"><use href="#ic-data"/></svg></span><div><h4>水质监测</h4><p>叶绿素 / 营养盐</p></div></div>
-      <button class="export-btn" id="exportBtn" type="button"><svg class="icon" style="width:15px;height:15px"><use href="#ic-download"/></svg>导出模拟序列 CSV</button>
+      <button class="export-btn" id="exportBtn" type="button"><svg class="icon" style="width:15px;height:15px"><use href="#ic-download"/></svg>导出当前站点序列 CSV</button>
     </section>
-    <footer><span>© 2026 AlgaeAI Research Prototype · 梅城三江口研究可视化界面</span><span>免责声明：所有监测数值、风险概率、空间热点和预测区间均为前端演示数据，不用于真实决策。</span></footer>
+    <footer><span>© 2026 AlgaeAI Research Prototype · 梅城三江口研究可视化界面</span><span>免责声明：预测值为 RSI 模型 2026 年 9 月回测结果；站点坐标为估计值，空间热力为插值示意；环境驱动因子与预警文案仍为演示，不用于真实决策。</span></footer>
   </main>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
     'use strict';
-    // ======================= 模拟数据（替换真实 API 的主要入口） =======================
-    // 天地图「浏览器端」Key：申请（免费）后粘贴到引号内，地图即加载真实天地图底图；留空则显示离线水系示意图
-    // 真实 Key 由本地 .env 提供，serve.ps1 启动时注入替换 __TDT_KEY__，请勿把真实 Key 提交进仓库
+    // 天地图「浏览器端」Key：由 serve.ps1 从本地 .env 注入替换 __TDT_KEY__，请勿把真实 Key 提交进仓库
     const TDT_KEY = '__TDT_KEY__';
-    const BASE_DATE = new Date('2026-08-12T12:00:00Z'); // 固定 UTC 正午，避免本地时区导致日期前移
-    // 站点坐标位于真实河道中线上（见 CHANNELS），CGCS2000/WGS84 在本尺度下通用
-    const STATIONS = {
-      xin:    {name:'新安江来水', desc:'新安江上游断面', lat:29.53657, lng:119.46859, bias:-0.12, chl:38.6, temp:28.4, ph:7.9, dox:8.6},
-      lan:    {name:'兰江来水',   desc:'兰江入汇断面',   lat:29.48055, lng:119.53125, bias: 0.08, chl:44.2, temp:29.1, ph:8.1, dox:8.2},
-      mix:    {name:'三江口核心', desc:'三江汇流断面',   lat:29.53359, lng:119.50979, bias: 0.00, chl:50.3, temp:29.8, ph:8.3, dox:8.0, core:true},
-      fuchun: {name:'富春江下游', desc:'汇流后下游断面', lat:29.54404, lng:119.54670, bias: 0.04, chl:47.5, temp:29.5, ph:8.2, dox:8.1}
-    };
-    const METRICS = {
-      chl:   { name:'叶绿素 a 浓度预测', unit:'μg/L', min:0, max:110, digits:0, base:[29,31,34,35,40,43,45], future:[48,52,56,61,66,71,75,77,81,84,88,90,93,95], spread:8, color:'#3980ea', threshold:70 },
-      phyco: { name:'藻蓝蛋白浓度预测',unit:'μg/L',min:0,max:230,digits:0,base:[65,69,73,79,87,91,101],future:[106,117,128,142,150,158,167,173,179,184,192,200,208,214],spread:17,color:'#3980ea',threshold:160 },
-      risk:  { name:'蓝藻风险概率预测',unit:'%',min:0,max:100,digits:0,base:[37,40,43,48,54,59,64],future:[65,68,72,76,78,81,84,86,87,89,90,91,92,93],spread:11,color:'#3980ea',threshold:80 },
-      temp:  { name:'表层水温预测',unit:'°C',min:20,max:37,digits:1,base:[28.1,28.3,28.7,28.9,29.2,29.6,29.8],future:[30,30.2,30.6,31,31.1,31.4,31.6,31.5,31.9,32.2,32.2,32.1,32.5,32.6],spread:1.1,color:'#3980ea',threshold:33 }
-    };
-    const state = {metric:'chl', horizon:7, station:'mix', day:0, layer:'risk', offlineZoom:1, playing:false, timer:null, leaflet:null, leafletMarkers:{}, heat:null, basemap:'sat', tdtErrors:0, mapLoaded:false};
+    // ======================= 数据入口：web_data/*.csv（修改 CSV 即可更新页面） =======================
+    const DATA_DIR = 'web_data/';
+    const BASE_MIN = '2026-09-01', BASE_MAX = '2026-09-27', BASE_DEFAULT = '2026-09-22';
+    const THRESHOLD = 10;   // 演示阈值 μg/L，非实际预警标准
+    const VMAX = 20;        // 色带满量程 μg/L
+    const STATION_ORDER = ['jiangjunyan','meichengmatou','yanlingwu','yanziling'];
+    const OFFLINE_POS = {meichengmatou:[442,311], jiangjunyan:[374,540], yanlingwu:[800,127], yanziling:[892,97]};
+    const STATIONS = {}, OBS = {}, FC = {};
+    const state = {base:BASE_DEFAULT, horizon:3, station:'meichengmatou', day:1, ready:false, offlineZoom:1, playing:false, timer:null, leaflet:null, leafletMarkers:{}, heat:null, basemap:'sat', tdtErrors:0, mapLoaded:false, geo:null};
     const $ = id => document.getElementById(id);
+    const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     function icon(id){return '<svg class="icon"><use href="#'+id+'"/></svg>';}
-    function toast(msg){const el=$('toast');el.textContent=msg;el.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.classList.remove('show'),2700);}
-    function datum(date){return [String(date.getUTCMonth()+1).padStart(2,'0'),String(date.getUTCDate()).padStart(2,'0')];}
-    function dayDate(offset){return new Date(BASE_DATE.getTime()+offset*86400000);}
-    function dateString(offset){return datum(dayDate(offset)).join('/');}
-    function stationOffset(metric, station){const v=STATIONS[station].bias;return metric==='chl'?v*38:metric==='phyco'?v*82:metric==='risk'?v*40:v*5;}
-    function metricData(metric,station){const m=METRICS[metric],o=stationOffset(metric,station);return {hist:m.base.map((v,i)=>v+o*Math.max(.65,i/6)), fut:m.future.map((v,i)=>v+o*(.7+i/20))};}
-    function rounded(v,dec){return Number(v).toFixed(dec);}
+    function toast(msg,ms){const el=$('toast');el.textContent=msg;el.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.classList.remove('show'),ms||2700);}
+
+    function parseCSV(text){
+      text=text.replace(/^\ufeff/,'');
+      const rows=[];let row=[],f='',q=false;
+      for(let i=0;i<text.length;i++){const c=text[i];
+        if(q){if(c==='"'){if(text[i+1]==='"'){f+='"';i++;}else q=false;}else f+=c;}
+        else if(c==='"')q=true;
+        else if(c===','){row.push(f);f='';}
+        else if(c==='\n'||c==='\r'){if(c==='\r'&&text[i+1]==='\n')i++;row.push(f);f='';if(row.length>1||row[0]!=='')rows.push(row);row=[];}
+        else f+=c;}
+      if(f!==''||row.length){row.push(f);rows.push(row);}
+      const head=(rows.shift()||[]).map(s=>s.trim());
+      return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||'').trim()])));
+    }
+    const num = s => (s==null||s==='') ? null : (Number.isFinite(+s) ? +s : null);
+    async function loadCSV(name){const r=await fetch(DATA_DIR+name,{cache:'no-store'});if(!r.ok)throw new Error(name+' HTTP '+r.status);return parseCSV(await r.text());}
+    async function loadData(){
+      const [st,ob,fc]=await Promise.all(['stations.csv','observed_daily.csv','forecast_rsi.csv'].map(loadCSV));
+      st.forEach(r=>{const lat=num(r.lat),lng=num(r.lng);if(!r.station_id||lat==null||lng==null)return;
+        STATIONS[r.station_id]={id:r.station_id,name:r.name||r.station_id,full:r.full_name||r.name||r.station_id,river:r.river||'',lat,lng,note:r.coord_note||''};});
+      ob.forEach(r=>{(OBS[r.station_id]||(OBS[r.station_id]={}))[r.date]=num(r.cyano_ugl_max);});
+      fc.forEach(r=>{const p=num(r.point);if(p==null)return;
+        FC[[r.station_id,r.origin_date,r.horizon,r.model].join('|')]={model:r.model,target:r.target_date,h:+r.horizon,point:p,q10:num(r.q10),q90:num(r.q90),actual:num(r.actual)};});
+      if(!Object.keys(STATIONS).length)throw new Error('stations.csv 中没有有效站点');
+    }
+    const stationIds = () => [...STATION_ORDER.filter(id=>STATIONS[id]), ...Object.keys(STATIONS).filter(id=>!STATION_ORDER.includes(id))];
+    // T+1 取 RSI-H1；T+2、T+3 取 RSI-H3（同一预测起点 origin_date = 基准日）
+    const modelFor = h => h===1 ? 'RSI-H1' : 'RSI-H3';
+    function forecast(id,h){return FC[[id,state.base,h,modelFor(h)].join('|')]||null;}
+    const obsAt = (id,d) => OBS[id]&&OBS[id][d]!=null ? OBS[id][d] : null;
+    function actualOf(id,h){const f=forecast(id,h);return f&&f.actual!=null?f.actual:obsAt(id,addDays(state.base,h));}
+    function addDays(iso,n){const d=new Date(iso+'T00:00:00Z');d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);}
+    const md = (iso,sep) => iso.slice(5,7)+(sep||'/')+iso.slice(8,10);
+    const dotted = iso => iso.replace(/-/g,'.');
+    const fmt = (v,dg) => v==null ? '—' : Number(v).toFixed(dg==null?2:dg);
+    const concLevel = v => v>=20?'高':v>=15?'较高':v>=10?'中':v>=5?'较低':'低';
+    function concColor(v){const c=rampColor(Math.min(1,Math.max(0,v/VMAX)));return `rgb(${c[0]|0},${c[1]|0},${c[2]|0})`;}
+
     function renderChart(){
-      const m=METRICS[state.metric],{hist,fut}=metricData(state.metric,state.station), future=fut.slice(0,state.horizon);
-      $('metricLabel').textContent=m.name; $('metricUnit').textContent=m.unit; $('stationNameHeader').textContent=STATIONS[state.station].name+' / 研究演示';
-      $('horizonKpi').innerHTML=state.horizon+'<small>天</small>';
-      const svg=$('forecast-chart'); const W=640,H=282,pad={l:44,r:13,t:24,b:38},x0=pad.l,x1=W-pad.r,y0=pad.t,y1=H-pad.b;
-      const arr=hist.concat(future), total=arr.length, nx=i=>x0+i*(x1-x0)/(total-1),ny=v=>y1-(v-m.min)/(m.max-m.min)*(y1-y0);
-      const fidx=hist.length-1, forecastSeries=[hist[6],...future], areaTop=[],areaBottom=[];
-      forecastSeries.forEach((v,j)=>{const band=(j===0?1:m.spread*(.55+j/state.horizon*.95));areaTop.push([nx(fidx+j),ny(Math.min(m.max,v+band))]); areaBottom.push([nx(fidx+j),ny(Math.max(m.min,v-band))]);});
-      const pts=xs=>xs.map(v=>v.map(n=>Number(n).toFixed(2)).join(',')).join(' ');
-      const hPoints=hist.map((v,i)=>[nx(i),ny(v)]),fPoints=forecastSeries.map((v,i)=>[nx(i+fidx),ny(v)]);
-      const area=[...areaTop,...areaBottom.reverse()];let marks='';
-      for(let i=0;i<=4;i++){const val=m.min+(m.max-m.min)*i/4,y=ny(val);marks+=`<line x1="${x0}" y1="${y}" x2="${x1}" y2="${y}" stroke="#eaf0f5" stroke-width="1"/><text x="${x0-10}" y="${y+4}" fill="#9daabb" font-size="11" text-anchor="end">${m.digits?val.toFixed(1):Math.round(val)}</text>`;}
-      const step=state.horizon===7?2:3;
-      for(let i=0;i<total;i++){if(i%step!==0 && i!==fidx && i!==total-1)continue;const date=dateString(i-6),x=nx(i);marks+=`<text x="${x}" y="${y1+23}" text-anchor="middle" fill="${i===fidx?'#3578e0':'#a4afbd'}" font-size="10.5" font-weight="${i===fidx?750:500}">${date}</text>`;}
-      const tickDots=arr.map((v,i)=>`<circle class="chart-dot" data-index="${i}" cx="${nx(i)}" cy="${ny(v)}" r="${i===fidx?4:3}" fill="#fff" stroke="${i<=fidx?'#1fa38a':'#3980ea'}" stroke-width="2.2" style="cursor:crosshair;pointer-events:all"/>`).join('');
-      const thresholdY=ny(m.threshold);
-      const maxVal=Math.max(...future),peakIndex=future.indexOf(maxVal),aboveDays=future.filter(v=>v>=m.threshold).length;
-      $('peakVal').innerHTML=rounded(maxVal,m.digits)+' <small>'+m.unit+'</small>';
-      $('peakDate').textContent=dateString(peakIndex+1)+' · 演示数据';
-      $('overDays').innerHTML=aboveDays+' <small>/ '+state.horizon+' 天</small>';
-      svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+      const svg=$('forecast-chart'),id=state.station,st=STATIONS[id],H=state.horizon;
+      $('stationNameHeader').textContent=st.full+(st.river?' / '+st.river:'');
+      $('horizonKpi').innerHTML=H+'<small>天</small>';
+      $('baseNote').textContent=dotted(state.base);
+      const pts=[];
+      for(let k=-6;k<=0;k++){const d=addDays(state.base,k);pts.push({date:d,k,v:obsAt(id,d)});}
+      for(let h=1;h<=H;h++){const f=forecast(id,h);pts.push({date:addDays(state.base,h),k:h,v:f?f.point:null,lo:f?f.q10:null,hi:f?f.q90:null,act:actualOf(id,h)});}
+      const fidx=6,total=pts.length,W=640,Hh=282,pad={l:44,r:13,t:24,b:38},x0=pad.l,x1=W-pad.r,y0=pad.t,y1=Hh-pad.b;
+      const all=[THRESHOLD*1.2];pts.forEach(p=>[p.v,p.hi,p.act].forEach(v=>{if(v!=null)all.push(v);}));
+      const vmax=Math.max(...all),step=[1,2,5,10,20,50,100].find(s=>vmax/s<=5)||200,ymax=Math.ceil(vmax/step)*step;
+      const nx=i=>x0+i*(x1-x0)/(total-1),ny=v=>y1-v/ymax*(y1-y0);
+      const P=a=>a.map(q=>q[0].toFixed(2)+','+q[1].toFixed(2)).join(' ');
+      const runs=list=>{const out=[];let cur=[];list.forEach(q=>{if(q)cur.push(q);else{if(cur.length)out.push(cur);cur=[];}});if(cur.length)out.push(cur);return out;};
+      let marks='';
+      for(let v=0;v<=ymax+1e-9;v+=step){const y=ny(v);marks+=`<line x1="${x0}" y1="${y}" x2="${x1}" y2="${y}" stroke="#eaf0f5" stroke-width="1"/><text x="${x0-10}" y="${y+4}" fill="#9daabb" font-size="11" text-anchor="end">${v}</text>`;}
+      pts.forEach((p,i)=>{marks+=`<text x="${nx(i)}" y="${y1+23}" text-anchor="middle" fill="${i===fidx?'#3578e0':'#a4afbd'}" font-size="10.5" font-weight="${i===fidx?750:500}">${md(p.date)}</text>`;});
+      const histRuns=runs(pts.slice(0,fidx+1).map((p,i)=>p.v==null?null:[nx(i),ny(p.v)]));
+      const futRuns=runs(pts.slice(fidx).map((p,j)=>p.v==null?null:[nx(fidx+j),ny(p.v)]));
+      // 区间带：基准日与 T+1（H1 无区间）收敛到点值，T+2/T+3 展开为 H3 的 q10–q90
+      const band=pts.slice(fidx).map((p,j)=>{const x=nx(fidx+j);if(j>1&&p.lo!=null&&p.hi!=null)return [x,ny(p.hi),ny(p.lo)];return p.v==null?null:[x,ny(p.v),ny(p.v)];});
+      let bandSvg='';
+      if(H>1)runs(band).forEach(r=>{if(r.length<2||r.every(q=>q[1]===q[2]))return;bandSvg+=`<polygon points="${P([...r.map(q=>[q[0],q[1]]),...r.slice().reverse().map(q=>[q[0],q[2]])])}" fill="url(#predBand)"/>`;});
+      const areaSvg=histRuns.filter(r=>r.length>1).map(r=>`<polygon points="${P([[r[0][0],y1],...r,[r[r.length-1][0],y1]])}" fill="url(#obsArea)"/>`).join('');
+      const lineH=histRuns.filter(r=>r.length>1).map(r=>`<polyline points="${P(r)}" fill="none" stroke="#20aa8d" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"/>`).join('');
+      const lineF=futRuns.filter(r=>r.length>1).map(r=>`<polyline points="${P(r)}" fill="none" stroke="#3980ea" stroke-width="2.7" stroke-dasharray="6 5" stroke-linecap="round" stroke-linejoin="round"/>`).join('');
+      let dots='',gaps='';
+      pts.forEach((p,i)=>{
+        if(p.v!=null)dots+=`<circle cx="${nx(i)}" cy="${ny(p.v)}" r="${i===fidx?4:3}" fill="#fff" stroke="${i<=fidx?'#1fa38a':'#3980ea'}" stroke-width="2.2"/>`;
+        else gaps+=`<text x="${nx(i)}" y="${y1-8}" text-anchor="middle" fill="#b9c3cf" font-size="9.5">${i<=fidx?'无实测':'无预测'}</text>`;
+        if(i>fidx&&p.act!=null)dots+=`<circle cx="${nx(i)}" cy="${ny(p.act)}" r="4.3" fill="none" stroke="#20aa8d" stroke-width="1.8" stroke-dasharray="2.2 1.6"/>`;
+      });
+      const colW=(x1-x0)/(total-1);
+      const hits=pts.map((p,i)=>`<rect class="chart-hit" data-index="${i}" x="${nx(i)-colW/2}" y="${y0}" width="${colW}" height="${y1-y0}" fill="transparent" style="cursor:crosshair"/>`).join('');
+      const thY=ny(THRESHOLD);
+      svg.setAttribute('viewBox',`0 0 ${W} ${Hh}`);
       svg.innerHTML=`<defs><linearGradient id="predBand" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#8db5ff" stop-opacity=".36"/><stop offset="1" stop-color="#d0e4ff" stop-opacity=".13"/></linearGradient><linearGradient id="obsArea" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#53c7aa" stop-opacity=".16"/><stop offset="1" stop-color="#bff5e8" stop-opacity="0"/></linearGradient></defs>
       ${marks}
       <line x1="${x0}" y1="${y1}" x2="${x1}" y2="${y1}" stroke="#cbd6e2" stroke-width="1"/>
-      <line x1="${x0}" y1="${thresholdY}" x2="${x1}" y2="${thresholdY}" stroke="#f0b57a" stroke-dasharray="4 5" opacity=".75"/><text x="${x1}" y="${thresholdY-5}" text-anchor="end" fill="#daa065" font-size="9.5">演示阈值 ${m.threshold}</text>
-      <polygon points="${pts([[nx(0),y1],...hPoints,[nx(fidx),y1]])}" fill="url(#obsArea)"/>
-      <polygon points="${pts(area)}" fill="url(#predBand)"/>
+      <line x1="${x0}" y1="${thY}" x2="${x1}" y2="${thY}" stroke="#f0b57a" stroke-dasharray="4 5" opacity=".75"/><text x="${x0+4}" y="${thY-5}" fill="#daa065" font-size="9.5">演示阈值 ${THRESHOLD} μg/L</text>
+      ${areaSvg}${bandSvg}
       <line x1="${nx(fidx)}" y1="${y0}" x2="${nx(fidx)}" y2="${y1}" stroke="#9eacc1" stroke-dasharray="5 5" stroke-width="1.2"/>
-      <text x="${nx(fidx)-8}" y="12" font-size="10" font-weight="750" text-anchor="end" fill="#209c85">历史观测</text><text x="${nx(fidx)+10}" y="12" font-size="10" font-weight="750" fill="#377bee">未来预测 →</text>
-      <polyline points="${pts(hPoints)}" fill="none" stroke="#20aa8d" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"/>
-      <polyline points="${pts(fPoints)}" fill="none" stroke="#3980ea" stroke-width="2.7" stroke-dasharray="6 5" stroke-linecap="round" stroke-linejoin="round"/>
-      ${tickDots}`;
-      svg.querySelectorAll('.chart-dot').forEach(dot=>{const i=Number(dot.dataset.index); const handler=(e)=>{
-        const tooltip=$('chartTooltip'),chartRect=$('chartWrap').getBoundingClientRect();const cx=nx(i)/W*chartRect.width,cy=ny(arr[i])/H*chartRect.height;
-        const value=rounded(arr[i],m.digits),role=i<=fidx?'历史示例':'预测示例';
-        tooltip.innerHTML=`${dateString(i-6)} · <em>${role}</em><br><strong>${value} ${m.unit}</strong>`;
-        tooltip.style.left=Math.max(68,Math.min(chartRect.width-68,cx))+'px';tooltip.style.top=Math.max(38,cy)+'px';tooltip.style.display='block';
-      };dot.addEventListener('mouseenter',handler);dot.addEventListener('click',handler);dot.addEventListener('mouseleave',()=>$('chartTooltip').style.display='none');});
+      <text x="${nx(fidx)-8}" y="12" font-size="10" font-weight="750" text-anchor="end" fill="#209c85">历史实测</text><text x="${nx(fidx)+10}" y="12" font-size="10" font-weight="750" fill="#377bee">RSI 预测 →</text>
+      ${lineH}${lineF}${dots}${gaps}${hits}`;
+      const fc=pts.slice(fidx+1).filter(p=>p.v!=null);
+      if(fc.length){const pk=fc.reduce((a,b)=>b.v>a.v?b:a);$('peakVal').innerHTML=fmt(pk.v)+' <small>μg/L</small>';$('peakDate').textContent=md(pk.date)+' · T+'+pk.k+' · '+modelFor(pk.k);}
+      else{$('peakVal').textContent='—';$('peakDate').textContent='该窗口无 RSI 预测';}
+      $('overDays').innerHTML=fc.filter(p=>p.v>=THRESHOLD).length+' <small>/ '+H+' 天</small>';
+      const pairs=fc.filter(p=>p.act!=null);
+      if(pairs.length){$('maeVal').innerHTML=fmt(pairs.reduce((s,p)=>s+Math.abs(p.v-p.act),0)/pairs.length)+' <small>μg/L</small>';$('maeFoot').textContent='RSI 预测 vs 实测 · '+pairs.length+' 天';}
+      else{$('maeVal').textContent='—';$('maeFoot').textContent='窗口内无可对比实测';}
+      const tip=$('chartTooltip');
+      svg.querySelectorAll('.chart-hit').forEach(el=>{const i=+el.dataset.index,p=pts[i];
+        const show=()=>{const rect=$('chartWrap').getBoundingClientRect(),yv=p.v!=null?p.v:p.act!=null?p.act:ymax/2;let html;
+          if(i<=fidx)html=`${md(p.date)} · <em>${i===fidx?'基准日实测':'历史实测'}</em><br><strong>${p.v==null?'无实测数据':fmt(p.v)+' μg/L'}</strong>`;
+          else{html=`${md(p.date)} · <em>T+${p.k} · ${modelFor(p.k)}</em><br><strong>${p.v==null?'该日无 RSI 预测':'预测 '+fmt(p.v)+' μg/L'}</strong>`;
+            if(p.v!=null)html+='<br>'+(p.lo!=null&&p.hi!=null?'区间 q10–q90：'+fmt(p.lo)+' – '+fmt(p.hi):'H1 为点预测（无区间）');
+            html+='<br>实测（回测）：'+(p.act==null?'—':fmt(p.act)+' μg/L');}
+          tip.innerHTML=html;tip.style.left=Math.max(85,Math.min(rect.width-85,nx(i)/W*rect.width))+'px';tip.style.top=Math.max(60,ny(yv)/Hh*rect.height)+'px';tip.style.display='block';};
+        el.addEventListener('mouseenter',show);el.addEventListener('click',show);el.addEventListener('mouseleave',()=>tip.style.display='none');});
     }
     function renderSparks(){
       document.querySelectorAll('.driver').forEach((el,i)=>{const v=el.dataset.spark.split(',').map(Number),lo=Math.min(...v),hi=Math.max(...v),y=x=>26-(x-lo)/Math.max(.001,hi-lo)*21;
@@ -500,105 +564,151 @@
         el.querySelector('.spark').innerHTML=`<polyline points="${p}" fill="none" stroke="${colors[i]}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>`;
       });
     }
-    function setStation(station){if(!STATIONS[station])return;state.station=station;document.querySelectorAll('#stationStrip button').forEach(b=>b.classList.toggle('active',b.dataset.id===station));document.querySelectorAll('.map-point').forEach(el=>el.classList.toggle('active',el.dataset.station===station));
-      Object.entries(state.leafletMarkers).forEach(([key,layer])=>{const div=layer.getElement()?.querySelector('.live-marker');if(div)div.classList.toggle('selected',key===station);});
-      $('mapDetailLabel').textContent=STATIONS[station].name+' · +'+state.day+' 天 · 模拟'; renderChart();toast('已切换至 '+STATIONS[station].name+'（示意站点）');
+    function updateLabels(){
+      const id=state.station,st=STATIONS[id],d=state.day,target=addDays(state.base,d),f=forecast(id,d);
+      $('dayLabel').textContent=md(target,' / ');
+      $('mapDetailLabel').textContent=`${st.name} · ${md(target)} · T+${d} · ${f?fmt(f.point)+' μg/L':'无预测'}`;
+      $('riskLevel').innerHTML=f?fmt(f.point)+'<small>μg/L</small>':'—';
+      $('riskFoot').textContent=f?`${st.name} · ${md(target)} · T+${d} · ${modelFor(d)}`:`${st.name} · T+${d} 无 RSI 预测`;
+      const f3=forecast(id,3),b=obsAt(id,state.base);
+      if(f3&&b!=null){
+        if(b>0.5){const pct=(f3.point-b)/b*100;$('trendVal').innerHTML=(pct>=0?'+':'')+pct.toFixed(1)+'<small>%</small>';}
+        else{const dv=f3.point-b;$('trendVal').innerHTML=(dv>=0?'+':'')+dv.toFixed(2)+'<small>μg/L</small>';}
+        $('trendFoot').textContent=`${st.name} · 基准日 ${fmt(b)} → T+3 ${fmt(f3.point)}`;
+      }else{$('trendVal').textContent='—';$('trendFoot').textContent=f3?st.name+' · 基准日无实测':st.name+' · T+3 无 RSI-H3 预测';}
     }
-    function updateHeat(){
-      const d=state.day,boost=d/7, layer=state.layer;
-      const A=$('hotspotA'),B=$('hotspotB'),C=$('hotspotC');
-      const scale=layer==='temp'?.78:layer==='chl'?1.04:1;
-      A.setAttribute('rx', Math.round((150+boost*110)*scale));A.setAttribute('ry', Math.round((95+boost*65)*scale));
-      B.setAttribute('rx', Math.round((135+boost*75)*scale));B.setAttribute('ry', Math.round((83+boost*34)*scale));
-      C.setAttribute('rx',Math.round((108+boost*60)*scale));
-      $('offlineHeat').setAttribute('opacity',layer==='temp'?.69:1);
-      const mapText=layer==='risk'?'蓝藻风险等级':layer==='chl'?'叶绿素 a 相对水平':'表层水温相对水平';
-      $('mapLegendTitle').textContent=mapText+' · 模拟';
-      $('dayLabel').textContent=dateString(d).replace('/',' / ');
-      $('mapDetailLabel').textContent=STATIONS[state.station].name+' · '+dateString(d)+' · 演示 '+(d===0?'基准日':'+'+d+'天');
-      const risk=Math.min(.92,.64+d*.036+STATIONS[state.station].bias*.4);
-      $('riskValue').textContent=risk.toFixed(2);$('riskLevel').firstChild.textContent=risk>.8?'较高 ':risk>.55?'中等 ':'较低 ';
-      updateHeatOverlay();
-      Object.values(state.leafletMarkers).forEach(m=>m.setPopupContent(stationPopup(m._station)));
+    function setStation(id,opt){
+      if(!STATIONS[id])return;opt=opt||{};state.station=id;
+      document.querySelectorAll('#stationStrip button').forEach(b=>b.classList.toggle('active',b.dataset.id===id));
+      document.querySelectorAll('.map-point').forEach(el=>el.classList.toggle('active',el.dataset.station===id));
+      renderChart();updateLabels();updateMarkers();
+      if(opt.fly&&state.mapLoaded)state.leaflet.flyTo([STATIONS[id].lat,STATIONS[id].lng],Math.max(state.leaflet.getZoom(),13),{duration:.8});
+      if(!opt.silent)toast('已切换至 '+STATIONS[id].full);
     }
-    function playPause(){state.playing=!state.playing;$('playButton').innerHTML=icon(state.playing?'ic-pause':'ic-play');$('playButton').setAttribute('aria-label',state.playing?'暂停播放':'播放时间序列');
-      if(state.playing){if(state.day>=7){state.day=0;$('daySlider').value=0;updateHeat();}state.timer=setInterval(()=>{state.day++; if(state.day>7){state.day=0;state.playing=false;clearInterval(state.timer);$('playButton').innerHTML=icon('ic-play');} $('daySlider').value=state.day;updateHeat();},950);}else clearInterval(state.timer);
+    function dayValues(){return stationIds().map(id=>{const f=forecast(id,state.day);return f?{id,v:f.point}:null;}).filter(Boolean);}
+    function updateHeat(){updateLabels();renderOfflineHeat();updateHeatOverlay();updateMarkers();}
+    function renderOfflineHeat(){
+      let defs='',body='';
+      stationIds().forEach((id,k)=>{const pos=OFFLINE_POS[id],f=forecast(id,state.day);if(!pos||!f)return;const c=concColor(f.point);
+        defs+=`<radialGradient id="og${k}"><stop stop-color="${c}" stop-opacity=".8"/><stop offset=".55" stop-color="${c}" stop-opacity=".45"/><stop offset="1" stop-color="${c}" stop-opacity="0"/></radialGradient>`;
+        body+=`<circle cx="${pos[0]}" cy="${pos[1]}" r="130" fill="url(#og${k})"/>`;});
+      $('offlineHeat').innerHTML=`<defs>${defs}</defs>${body}`;
+    }
+    function playPause(){
+      if(!state.ready)return;state.playing=!state.playing;
+      $('playButton').innerHTML=icon(state.playing?'ic-pause':'ic-play');$('playButton').setAttribute('aria-label',state.playing?'暂停播放':'播放时间序列');
+      if(!state.playing){clearInterval(state.timer);return;}
+      if(state.day>=3){state.day=1;$('daySlider').value=1;updateHeat();}
+      state.timer=setInterval(()=>{state.day++;$('daySlider').value=state.day;updateHeat();if(state.day>=3)playPause();},1200);
     }
     function zoomMap(delta){if(state.mapLoaded){state.leaflet.setZoom(state.leaflet.getZoom()+delta);}else{state.offlineZoom=Math.max(1,Math.min(1.8,state.offlineZoom+delta*.18));$('offline-svg').style.transform=`scale(${state.offlineZoom})`;}}
-    function downloadCSV(){const cols=['date','station','metric','stage','value','unit','is_demo'];const m=METRICS[state.metric],data=metricData(state.metric,state.station),values=data.hist.concat(data.fut.slice(0,state.horizon));
-      const lines=[cols.join(',')];values.forEach((v,i)=>lines.push([dateString(i-6),STATIONS[state.station].name,state.metric,i<=6?'historical_demo':'forecast_demo',rounded(v,m.digits),m.unit,true].join(',')));
-      const csv='\ufeff'+lines.join('\r\n');const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`Meicheng_Sanjiangkou_DEMO_${state.metric}_${state.horizon}d.csv`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),600);toast('已导出模拟数据 CSV');
+    function downloadCSV(){
+      if(!state.ready)return;
+      const id=state.station,s=STATIONS[id],v=x=>x==null?'':Number(x).toFixed(3),name='"'+s.name.replace(/"/g,'""')+'"';
+      const lines=['date,station_id,station,stage,horizon,model,value_ugl,q10,q90,actual_ugl'];
+      for(let k=-6;k<=0;k++){const d=addDays(state.base,k);lines.push([d,id,name,'observed','','',v(obsAt(id,d)),'','',''].join(','));}
+      for(let h=1;h<=state.horizon;h++){const f=forecast(id,h);lines.push([addDays(state.base,h),id,name,'forecast',h,modelFor(h),v(f&&f.point),v(f&&f.q10),v(f&&f.q90),v(actualOf(id,h))].join(','));}
+      const blob=new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8;'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+      a.href=url;a.download=`Meicheng_RSI_${id}_${state.base}_${state.horizon}d.csv`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),600);toast('已导出 '+s.name+' 序列 CSV');
     }
-    // ======================= 天地图 WMTS 底图 + 自定义蓝藻预测图层 =======================
-    // 真实河道中线（经纬度）：按卫星影像逐段校准（Esri World Imagery z14），width 为近似水面宽（米）
-    const CHANNELS=[
-      {width:550,pts:[[29.53881,119.42396],[29.53807,119.45357],[29.53657,119.46859],[29.53433,119.48576],[29.53374,119.49863],[29.53359,119.50979]]},
-      {width:650,pts:[[29.45873,119.52267],[29.46934,119.52610],[29.48055,119.53125],[29.49176,119.53554],[29.50670,119.53812],[29.51790,119.53211],[29.52537,119.52353],[29.53060,119.51580],[29.53359,119.50979]]},
-      {width:600,pts:[[29.53359,119.50979],[29.53807,119.52009],[29.54180,119.53297],[29.54404,119.54670],[29.55524,119.55228],[29.56644,119.55872],[29.57390,119.56301],[29.58809,119.56902]]}
+    // ======================= 基准日日历（2026 年 9 月，仅 1–27 日可选） =======================
+    function renderCalendar(){
+      let h='一二三四五六日'.split('').map(w=>`<span class="cal-w">${w}</span>`).join('');
+      const lead=(new Date('2026-09-01T00:00:00Z').getUTCDay()+6)%7;
+      for(let i=0;i<lead;i++)h+='<span></span>';
+      for(let d=1;d<=30;d++){const iso='2026-09-'+String(d).padStart(2,'0'),off=iso<BASE_MIN||iso>BASE_MAX;
+        h+=`<button type="button" data-date="${iso}"${off?' disabled title="超出可选范围"':''} class="${iso===state.base?'sel':''}">${d}</button>`;}
+      $('calGrid').innerHTML=h;
+    }
+    function toggleCal(open){
+      const pop=$('calPop'),btn=$('baseBtn');open=open==null?pop.hidden:open;
+      if(open){if(!state.ready)return;const r=btn.getBoundingClientRect();pop.style.left=(window.scrollX+Math.max(8,Math.min(r.left,document.documentElement.clientWidth-272)))+'px';pop.style.top=(window.scrollY+r.bottom+8)+'px';}
+      pop.hidden=!open;btn.setAttribute('aria-expanded',String(open));
+    }
+    function setBase(iso){
+      if(!(iso>=BASE_MIN&&iso<=BASE_MAX))return;
+      state.base=iso;$('baseLabel').textContent=dotted(iso);renderCalendar();renderChart();updateHeat();
+    }
+    function showLoadError(err){
+      const lines=location.protocol==='file:'?['直接双击打开 HTML 时浏览器禁止读取本地 CSV','请运行 serve.ps1 后访问 http://localhost:8000/']:['读取 web_data/*.csv 失败',String(err&&err.message||err)];
+      $('mapDetailLabel').textContent='数据读取失败';$('stationNameHeader').textContent='数据读取失败';
+      const svg=$('forecast-chart');svg.setAttribute('viewBox','0 0 640 282');
+      svg.innerHTML=`<text x="320" y="122" text-anchor="middle" fill="#c0703c" font-size="14" font-weight="700">未能读取 CSV 数据</text>`+lines.map((t,i)=>`<text x="320" y="${150+i*20}" text-anchor="middle" fill="#8a9bb0" font-size="11.5">${esc(t)}</text>`).join('');
+      toast(lines.join('，'),9000);
+    }
+    // ======================= 天地图 WMTS 底图 + RSI 浓度热力（沿河网插值示意） =======================
+    // 河道中线来自 OpenStreetMap 并按卫星影像核对；每条支流从三江汇流点 CONF 起算里程；width 为近似水面宽（米）
+    const CONF=[29.53374,119.51864], CONF_R=600;
+    const BRANCHES=[
+      {name:'新安江',pieces:[{width:480,pts:[[29.53374,119.51864],[29.5362,119.5080],[29.5366,119.5000],[29.5378,119.4900],[29.53858,119.47922],[29.53679,119.46617],[29.53892,119.44512]]}]},
+      {name:'兰江',pieces:[{width:550,pts:[[29.53374,119.51864],[29.52589,119.51801],[29.52081,119.52110],[29.51438,119.53175],[29.50721,119.53707],[29.49974,119.53947],[29.49257,119.53793],[29.48555,119.53243],[29.48081,119.53027],[29.47090,119.52574],[29.46134,119.51870],[29.45073,119.51029],[29.44624,119.51029],[29.44101,119.51527],[29.43533,119.52677],[29.43084,119.53295],[29.42418,119.53646],[29.42105,119.53707],[29.41933,119.53741]]}]},
+      {name:'富春江',pieces:[
+        {width:950,pts:[[29.53374,119.51864],[29.54139,119.53816],[29.55122,119.54828],[29.56671,119.56423]]},
+        {width:400,pts:[[29.56671,119.56423],[29.57974,119.56652],[29.59149,119.56988],[29.59690,119.57414],[29.60238,119.58159],[29.60456,119.58328],[29.62061,119.59576],[29.62510,119.60345],[29.63008,119.61451],[29.63741,119.62352],[29.64773,119.63302],[29.65079,119.64080],[29.65357,119.64367],[29.65770,119.64506],[29.66915,119.64023]]},
+        {width:560,pts:[[29.66915,119.64023],[29.6778,119.6403],[29.6850,119.6440],[29.6950,119.6552],[29.7010,119.6568],[29.7060,119.6550],[29.7095,119.6535]]}]}
     ];
-    // 演示风险热点：高斯衰减场，g 为逐日增长系数；位置均落在河道中线上
-    const HOTSPOTS=[
-      {lat:29.53359,lng:119.50979,base:.55,r:600,g:.055},
-      {lat:29.50670,lng:119.53812,base:.42,r:520,g:.04},
-      {lat:29.54404,lng:119.54670,base:.48,r:550,g:.06},
-      {lat:29.53657,lng:119.46859,base:.28,r:520,g:.03}
-    ];
-    const CENTER=[29.53359,119.50979];
+    const CENTER=CONF;
     const M_LAT=110940, M_LNG=111320*Math.cos(CENTER[0]*Math.PI/180);
-    const HEAT_BBOX={w:119.432,s:29.472,e:119.572,n:29.566}, HEAT_W=760;
+    const HEAT_BBOX={w:119.440,s:29.415,e:119.668,n:29.716}, HEAT_W=800, FEATHER=110;
     const mXY=(lat,lng)=>[(lng-CENTER[1])*M_LNG,(lat-CENTER[0])*M_LAT];
-    const CH_SEGS=CHANNELS.map(c=>{const p=c.pts.map(q=>mXY(q[0],q[1])),segs=[];for(let i=0;i<p.length-1;i++)segs.push([p[i],p[i+1]]);return {half:c.width/2,segs};});
-    const HOT_M=HOTSPOTS.map(h=>({xy:mXY(h.lat,h.lng),base:h.base,sig:h.r/1.6,g:h.g}));
-    function segDist(x,y,a,b){const dx=b[0]-a[0],dy=b[1]-a[1],L2=dx*dx+dy*dy;let t=L2?((x-a[0])*dx+(y-a[1])*dy)/L2:0;t=Math.max(0,Math.min(1,t));const px=a[0]+t*dx-x,py=a[1]+t*dy-y;return Math.hypot(px,py);}
-    // 到水体的距离（米，负值=在水体内）；热力边缘羽化 110m，避免生硬边界
-    function waterDist(x,y){
-      let d=Math.hypot(x,y)-650;
-      for(const c of CH_SEGS){for(const sg of c.segs){const dd=segDist(x,y,sg[0],sg[1])-c.half;if(dd<d)d=dd;}}
-      return d;
+    const SEGS=[];
+    BRANCHES.forEach((b,bi)=>{let s=0;b.pieces.forEach(pc=>{const q=pc.pts.map(p=>mXY(p[0],p[1]));
+      for(let i=0;i<q.length-1;i++){const dx=q[i+1][0]-q[i][0],dy=q[i+1][1]-q[i][1],len=Math.sqrt(dx*dx+dy*dy);SEGS.push({b:bi,ax:q[i][0],ay:q[i][1],dx,dy,len,s0:s,half:pc.width/2});s+=len;}});});
+    // 返回 [到水面距离(米，负值=水面内), 所属支流, 自汇流点起算里程(米)]
+    function locate(x,y){
+      let best=Infinity,br=0,ch=0;
+      for(const g of SEGS){let t=g.len?((x-g.ax)*g.dx+(y-g.ay)*g.dy)/(g.len*g.len):0;t=t<0?0:t>1?1:t;
+        const px=g.ax+t*g.dx-x,py=g.ay+t*g.dy-y,d=Math.sqrt(px*px+py*py)-g.half;if(d<best){best=d;br=g.b;ch=g.s0+t*g.len;}}
+      const dc=Math.sqrt(x*x+y*y)-CONF_R;if(dc<best)best=dc;
+      return [best,br,ch];
     }
-    function riskAtM(x,y,day,factor){let r=.05;for(const h of HOT_M){const dx=x-h.xy[0],dy=y-h.xy[1];r+=h.base*(1+h.g*day)*Math.exp(-(dx*dx+dy*dy)/(2*h.sig*h.sig));}return Math.min(1,r*factor);}
-    const riskAt=(lat,lng,day,factor)=>{const [x,y]=mXY(lat,lng);return riskAtM(x,y,day,factor);};
-    // 青绿 → 黄 → 橙 → 红 的风险色带（透明度随等级升高，卫星底图仍可见）
-    const RAMP=[[0,32,191,165,0],[.18,32,191,165,88],[.38,44,197,168,122],[.55,240,200,96,138],[.75,240,166,60,158],[1,232,101,88,172]];
-    function rampColor(r){for(let i=1;i<RAMP.length;i++){if(r<=RAMP[i][0]){const a=RAMP[i-1],b=RAMP[i],t=(r-a[0])/(b[0]-a[0]||1);return [a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t,a[3]+(b[3]-a[3])*t,a[4]+(b[4]-a[4])*t];}}return RAMP[RAMP.length-1].slice(1);}
-    function buildHeatURL(){
-      const factor=state.layer==='temp'?.8:state.layer==='chl'?.95:1, day=state.day;
+    // 几何场与日期无关，只算一次并缓存，切换日期时只重新着色
+    function geoCache(){
+      if(state.geo)return state.geo;
       const W=HEAT_W,H=Math.round(W*(HEAT_BBOX.n-HEAT_BBOX.s)*M_LAT/((HEAT_BBOX.e-HEAT_BBOX.w)*M_LNG));
-      // 水体距离场与日期无关，只算一次并缓存，拖动时间轴时热力秒级刷新
-      if(!state.wdCache||state.wdCache.W!==W||state.wdCache.H!==H){
-        const wdArr=new Float32Array(W*H);
-        for(let py=0;py<H;py++){const lat=HEAT_BBOX.n-(py+.5)/H*(HEAT_BBOX.n-HEAT_BBOX.s);
-          for(let px=0;px<W;px++){const lng=HEAT_BBOX.w+(px+.5)/W*(HEAT_BBOX.e-HEAT_BBOX.w);
-            const [x,y]=mXY(lat,lng);wdArr[py*W+px]=waterDist(x,y);}}
-        state.wdCache={W,H,wd:wdArr};
-      }
-      const wdArr=state.wdCache.wd;
-      const cv=document.createElement('canvas');cv.width=W;cv.height=H;const ctx=cv.getContext('2d');
-      const img=ctx.createImageData(W,H),d=img.data;
+      const wd=new Float32Array(W*H),br=new Uint8Array(W*H),ch=new Float32Array(W*H);
       for(let py=0;py<H;py++){const lat=HEAT_BBOX.n-(py+.5)/H*(HEAT_BBOX.n-HEAT_BBOX.s);
-        for(let px=0;px<W;px++){const wd=wdArr[py*W+px];if(wd>110)continue;
-          const lng=HEAT_BBOX.w+(px+.5)/W*(HEAT_BBOX.e-HEAT_BBOX.w);
-          const [x,y]=mXY(lat,lng);
-          const c=rampColor(riskAtM(x,y,day,factor)),o=(py*W+px)*4,feather=wd<=0?1:1-wd/110;
-          d[o]=c[0];d[o+1]=c[1];d[o+2]=c[2];d[o+3]=Math.round(c[3]*feather);}}
+        for(let px=0;px<W;px++){const lng=HEAT_BBOX.w+(px+.5)/W*(HEAT_BBOX.e-HEAT_BBOX.w),[x,y]=mXY(lat,lng),r=locate(x,y),i=py*W+px;wd[i]=r[0];br[i]=r[1];ch[i]=r[2];}}
+      return state.geo={W,H,wd,br,ch};
+    }
+    function stationNet(id){const s=STATIONS[id];if(!s._net){const [x,y]=mXY(s.lat,s.lng),r=locate(x,y);s._net={b:r[1],s:r[2]};}return s._net;}
+    const RAMP=[[0,95,208,187,80],[.25,44,197,168,115],[.5,240,200,96,140],[.75,240,166,60,160],[1,232,101,88,178]];
+    function rampColor(r){for(let i=1;i<RAMP.length;i++){if(r<=RAMP[i][0]){const a=RAMP[i-1],b=RAMP[i],t=(r-a[0])/(b[0]-a[0]||1);return [a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t,a[3]+(b[3]-a[3])*t,a[4]+(b[4]-a[4])*t];}}return RAMP[RAMP.length-1].slice(1);}
+    // 沿河网距离反距离加权：同一支流取里程差，跨支流经汇流点取里程和；远离所有测站处降低不透明度
+    function buildHeatURL(vals){
+      const g=geoCache(),W=g.W,H=g.H,cv=document.createElement('canvas');cv.width=W;cv.height=H;
+      const ctx=cv.getContext('2d'),img=ctx.createImageData(W,H),d=img.data,S=vals.map(o=>Object.assign({v:o.v},stationNet(o.id)));
+      for(let i=0;i<W*H;i++){const wd=g.wd[i];if(wd>FEATHER)continue;
+        const b=g.br[i],c=g.ch[i];let sw=0,sv=0,dmin=Infinity;
+        for(const s of S){const dist=s.b===b?Math.abs(c-s.s):c+s.s,w=1/((dist+300)*(dist+300));sw+=w;sv+=w*s.v;if(dist<dmin)dmin=dist;}
+        const col=rampColor(Math.min(1,sv/sw/VMAX)),fe=wd<=0?1:1-wd/FEATHER,conf=dmin<=4000?1:Math.max(.5,1-(dmin-4000)/16000),o=i*4;
+        d[o]=col[0];d[o+1]=col[1];d[o+2]=col[2];d[o+3]=Math.round(col[3]*fe*conf);}
       ctx.putImageData(img,0,0);return cv.toDataURL('image/png');
     }
     function updateHeatOverlay(){
       if(!state.leaflet)return;
-      const url=buildHeatURL(),b=[[HEAT_BBOX.s,HEAT_BBOX.w],[HEAT_BBOX.n,HEAT_BBOX.e]];
-      if(state.heat)state.heat.setUrl(url);else state.heat=L.imageOverlay(url,b,{interactive:false}).addTo(state.leaflet);
+      const vals=dayValues();
+      if(!vals.length){if(state.heat)state.heat.setOpacity(0);return;}
+      const url=buildHeatURL(vals),b=[[HEAT_BBOX.s,HEAT_BBOX.w],[HEAT_BBOX.n,HEAT_BBOX.e]];
+      if(state.heat){state.heat.setUrl(url);state.heat.setOpacity(1);}else state.heat=L.imageOverlay(url,b,{interactive:false}).addTo(state.leaflet);
     }
-    function riskLevel(r){return r>=.75?['高','#e86558']:r>=.55?['较高','#f0a63c']:r>=.35?['中','#f0c860']:r>=.2?['较低','#2cc5a8']:['低','#20bf9f'];}
-    function stationPopup(s){
-      const r=riskAt(s.lat,s.lng,state.day,1),[lv,lc]=riskLevel(r);
-      const chl=(s.chl*(1+.012*state.day)).toFixed(1);
-      const timeDesc=state.day===0?'基准日观测':'未来 '+state.day+' 天预测';
-      return `<div class="sp-head"><div class="sp-name">${s.name}断面</div><div class="sp-sub">${dateString(state.day).replace('/','.')} · ${timeDesc} · 演示</div></div><div class="sp-rows">`+
-        `<div class="sp-row"><span class="k">叶绿素 a<small>μg/L</small></span><span class="v">${chl}</span></div>`+
-        `<div class="sp-row"><span class="k">水温<small>°C</small></span><span class="v">${s.temp.toFixed(1)}</span></div>`+
-        `<div class="sp-row"><span class="k">pH<small>无量纲</small></span><span class="v">${s.ph.toFixed(1)}</span></div>`+
-        `<div class="sp-row"><span class="k">溶解氧<small>mg/L</small></span><span class="v">${s.dox.toFixed(1)}</span></div>`+
-        `<div class="sp-row"><span class="k">蓝藻风险<small>等级 · 概率</small></span><span class="v sp-risk"><i style="background:${lc}"></i>${lv} · ${r.toFixed(2)}</span></div></div>`;
+    const popRow=(k,sub,v)=>`<div class="sp-row"><span class="k">${k}${sub?'<small>'+sub+'</small>':''}</span><span class="v">${v}</span></div>`;
+    function stationPopup(id){
+      const s=STATIONS[id],d=state.day,target=addDays(state.base,d),f=forecast(id,d);
+      const lv=f?`<span class="v sp-risk"><i style="background:${concColor(f.point)}"></i>${concLevel(f.point)}</span>`:'<span class="v">—</span>';
+      return `<div class="sp-head"><div class="sp-name">${esc(s.full)}</div><div class="sp-sub">${dotted(target)} · 未来 ${d} 天预测 · ${modelFor(d)}</div></div><div class="sp-rows">`+
+        popRow('预测浓度','μg/L',f?fmt(f.point):'该日无预测')+
+        popRow('预测区间','q10–q90 · μg/L',!f?'—':f.q10!=null&&f.q90!=null?fmt(f.q10)+' – '+fmt(f.q90):'H1 点预测')+
+        popRow('实测（回测）','μg/L',fmt(actualOf(id,d)))+
+        popRow('基准日实测',md(state.base)+' · μg/L',fmt(obsAt(id,state.base)))+
+        `<div class="sp-row"><span class="k">浓度等级<small>演示分级</small></span>${lv}</div>`+
+        popRow('所在河段','',esc(s.river||'—'))+'</div>'+(s.note?`<div class="sp-note">${esc(s.note)}</div>`:'');
+    }
+    function updateMarkers(){
+      Object.entries(state.leafletMarkers).forEach(([id,m])=>{const f=forecast(id,state.day);
+        m.setPopupContent(stationPopup(id));m.setTooltipContent(STATIONS[id].name+' · '+(f?fmt(f.point)+' μg/L':'无预测'));
+        const el=m.getElement()&&m.getElement().querySelector('.live-marker');
+        if(el){el.style.background=f?concColor(f.point):'#9aa8b6';el.classList.toggle('selected',id===state.station);}});
     }
     // 天地图 WMTS 服务：卫星 img_w+cia_w / 标准 vec_w+cva_w；t0–t7 负载均衡
     function tdtLayer(layer){
@@ -611,56 +721,75 @@
       $('swSat').classList.toggle('active',kind==='sat');$('swVec').classList.toggle('active',kind==='vec');
       if(state.baseLayers){state.baseLayers.forEach(l=>{try{state.leaflet.removeLayer(l);}catch(e){}});}
       state.baseLayers=[];
-      // 开发校准：URL 加 ?basemap=esri 或 ?basemap=osm 可临时用免 Key 底图核对预测图层与河道对齐，界面对用户不暴露
+      // 开发校准：URL 加 ?basemap=esri 或 ?basemap=osm 可临时用免 Key 底图核对热力与河道对齐，界面对用户不暴露
       const dev=/[?&]basemap=(esri|osm)/.exec(location.search);
       if(dev){
         const t=dev[1]==='esri'
           ?L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{attribution:'© Esri World Imagery',maxZoom:18,minZoom:9})
           :L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap',maxZoom:18,minZoom:9});
-        t.on('tileload',()=>{if(state.mapLoaded)return;state.mapLoaded=true;$('leaflet-map').style.visibility='visible';$('mapMode').textContent=(dev[1]==='esri'?'Esri 卫星':'OSM')+' 开发校准底图 · 交付时使用天地图';state.leaflet.invalidateSize();});
+        t.on('tileload',()=>{if(state.mapLoaded)return;state.mapLoaded=true;$('leaflet-map').style.visibility='visible';$('mapMode').textContent=(dev[1]==='esri'?'Esri 卫星':'OSM')+' 开发校准底图 · 交付时使用天地图';state.leaflet.invalidateSize();if(!state.fitted)fitStations();});
         t.addTo(state.leaflet);state.baseLayers.push(t);return;
       }
       if(!TDT_KEY){$('mapMode').textContent='水系示意图 · 非测绘底图';return;}
       state.tdtErrors=0;
       const base=tdtLayer(kind==='sat'?'img':'vec'),anno=tdtLayer(kind==='sat'?'cia':'cva');
-      base.on('tileload',()=>{if(state.mapLoaded)return;state.mapLoaded=true;$('leaflet-map').style.visibility='visible';$('mapMode').textContent=(kind==='sat'?'天地图卫星影像':'天地图标准地图')+' · CGCS2000 · 预测图层为演示';state.leaflet.invalidateSize();});
+      base.on('tileload',()=>{if(state.mapLoaded)return;state.mapLoaded=true;$('leaflet-map').style.visibility='visible';$('mapMode').textContent=(kind==='sat'?'天地图卫星影像':'天地图标准地图')+' · CGCS2000 · 热力为插值示意';state.leaflet.invalidateSize();if(!state.fitted)fitStations();});
       base.on('tileerror',()=>{state.tdtErrors++;if(state.tdtErrors>=8)$('mapMode').textContent='水系示意图 · 底图服务连接失败';});
       base.addTo(state.leaflet);anno.addTo(state.leaflet);state.baseLayers.push(base,anno);
+    }
+    function fitStations(){
+      if(!state.leaflet)return;const ids=stationIds(),sz=state.leaflet.getSize();
+      // 容器尚无尺寸时 fitBounds 会算出极大缩放级别，先给默认视野，底图首块瓦片加载后再适配
+      if(!sz.x||!sz.y){state.leaflet.setView(CENTER,11);return;}
+      state.fitted=true;
+      if(ids.length)state.leaflet.fitBounds(L.latLngBounds(ids.map(id=>[STATIONS[id].lat,STATIONS[id].lng]).concat([CONF])),{padding:[40,40]});
+      else state.leaflet.setView(CENTER,12);
     }
     function initLeaflet(){
       if(!window.L)return;
       try {
-        const map=L.map('leaflet-map',{zoomControl:false, attributionControl:true,preferCanvas:true,scrollWheelZoom:false}).setView(CENTER,12);
-        state.leaflet=map;
-        setBasemap('sat');
-        Object.entries(STATIONS).forEach(([key,s])=>{
-          const marker=L.marker([s.lat,s.lng],{icon:L.divIcon({className:'',html:`<div class="live-marker ${s.core?'core':''} ${key===state.station?'selected':''}"></div>`,iconSize:[17,17],iconAnchor:[8,8]}),zIndexOffset:600}).addTo(map);
-          marker._station=s;
-          marker.bindPopup(stationPopup(s),{className:'station-popup',maxWidth:270,offset:[0,-4]});
-          marker.bindTooltip(s.name+' · 点击查看断面数据',{direction:'top'});
-          marker.on('click',()=>setStation(key));state.leafletMarkers[key]=marker;
-        });
-        try{updateHeatOverlay();}catch(err){console.warn('预测热力图层生成失败：',err);}
+        const map=L.map('leaflet-map',{zoomControl:false,attributionControl:true,preferCanvas:true,scrollWheelZoom:false,minZoom:9});
+        state.leaflet=map;fitStations();setBasemap('sat');
+        stationIds().forEach(id=>{const s=STATIONS[id];
+          const marker=L.marker([s.lat,s.lng],{icon:L.divIcon({className:'',html:'<div class="live-marker"></div>',iconSize:[17,17],iconAnchor:[8,8]}),zIndexOffset:600}).addTo(map);
+          marker.bindPopup(stationPopup(id),{className:'station-popup',maxWidth:270,offset:[0,-4]});
+          marker.bindTooltip(s.name,{direction:'top'});
+          marker.on('click',()=>setStation(id,{silent:true}));state.leafletMarkers[id]=marker;});
+        updateMarkers();
+        try{updateHeatOverlay();}catch(err){console.warn('浓度热力图层生成失败：',err);}
       } catch(err) {console.warn('Leaflet 初始化未完成，继续使用离线水系示意图。',err);}
     }
-    function setup(){
-      renderChart(); renderSparks();updateHeat();
-      $('metricSelect').addEventListener('change',e=>{state.metric=e.target.value;renderChart();});
-      $('mapLayer').addEventListener('change',e=>{state.layer=e.target.value;updateHeat();});
-      document.querySelectorAll('[data-horizon]').forEach(btn=>btn.addEventListener('click',()=>{state.horizon=Number(btn.dataset.horizon);document.querySelectorAll('[data-horizon]').forEach(x=>x.classList.toggle('active',x===btn));renderChart();}));
-      $('daySlider').addEventListener('input',e=>{state.day=Number(e.target.value);updateHeat();});
+    async function setup(){
+      renderSparks();
+      document.querySelectorAll('[data-horizon]').forEach(btn=>btn.addEventListener('click',()=>{if(!state.ready)return;state.horizon=Number(btn.dataset.horizon);document.querySelectorAll('[data-horizon]').forEach(x=>x.classList.toggle('active',x===btn));renderChart();}));
+      $('daySlider').addEventListener('input',e=>{if(!state.ready)return;state.day=Number(e.target.value);updateHeat();});
       $('playButton').addEventListener('click',playPause);
-      document.querySelectorAll('#stationStrip button').forEach(btn=>btn.addEventListener('click',()=>setStation(btn.dataset.id)));
       document.querySelectorAll('.map-point').forEach(el=>{el.addEventListener('click',()=>setStation(el.dataset.station));el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();setStation(el.dataset.station);}});});
       $('swSat').addEventListener('click',()=>setBasemap('sat'));
       $('swVec').addEventListener('click',()=>setBasemap('vec'));
-      $('zoomIn').addEventListener('click',()=>zoomMap(1));$('zoomOut').addEventListener('click',()=>zoomMap(-1));$('resetMap').addEventListener('click',()=>{state.offlineZoom=1;$('offline-svg').style.transform='scale(1)';if(state.mapLoaded)state.leaflet.setView(CENTER,12);toast('已定位至梅城三江口附近');});
+      $('zoomIn').addEventListener('click',()=>zoomMap(1));$('zoomOut').addEventListener('click',()=>zoomMap(-1));
+      $('resetMap').addEventListener('click',()=>{state.offlineZoom=1;$('offline-svg').style.transform='scale(1)';if(state.mapLoaded)fitStations();toast('已显示全部测站');});
       $('exportBtn').addEventListener('click',downloadCSV);
-      $('aboutBtn').addEventListener('click',()=>toast('本页面为学生设计参考，所有预测值均为模拟数据。地图定位：建德梅城三江口。'));
+      $('aboutBtn').addEventListener('click',()=>toast('预测值读取自 web_data/forecast_rsi.csv（RSI-H1 / RSI-H3，2026 年 9 月回测）；站点坐标为估计值，热力为沿河道插值示意。',5000));
+      $('baseBtn').addEventListener('click',e=>{e.stopPropagation();toggleCal();});
+      $('calGrid').addEventListener('click',e=>{const b=e.target.closest('button[data-date]');if(!b||b.disabled)return;toggleCal(false);if(b.dataset.date!==state.base){setBase(b.dataset.date);toast('基准日已切换为 '+dotted(b.dataset.date));}});
+      document.addEventListener('click',e=>{if(!$('calPop').hidden&&!e.target.closest('#calPop,#baseBtn'))toggleCal(false);});
+      document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('calPop').hidden){toggleCal(false);$('baseBtn').focus();}});
       document.querySelectorAll('[data-alert]').forEach(btn=>btn.addEventListener('click',()=>{$(btn.dataset.alert).classList.toggle('is-open');btn.textContent=$(btn.dataset.alert).classList.contains('is-open')?'⌃':'⌄';}));
       document.querySelectorAll('.nav [data-scroll]').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b===btn));$(btn.dataset.scroll).scrollIntoView({behavior:'smooth',block:'start'});}));
+      try{await loadData();state.ready=true;}catch(err){console.error(err);showLoadError(err);}
+      if(state.ready){
+        const q=/[?&]base=(\d{4}-\d{2}-\d{2})/.exec(location.search);
+        if(q&&q[1]>=BASE_MIN&&q[1]<=BASE_MAX)state.base=q[1];
+        if(!STATIONS[state.station])state.station=stationIds()[0];
+        document.querySelectorAll('.map-point').forEach(el=>{if(!STATIONS[el.dataset.station])el.style.display='none';});
+        $('stationStrip').innerHTML=stationIds().map(id=>`<button type="button" data-id="${esc(id)}">${esc(STATIONS[id].name)}</button>`).join('');
+        document.querySelectorAll('#stationStrip button').forEach(btn=>btn.addEventListener('click',()=>setStation(btn.dataset.id,{fly:true})));
+        $('baseLabel').textContent=dotted(state.base);renderCalendar();
+        setStation(state.station,{silent:true});renderOfflineHeat();
+      }
       setTimeout(initLeaflet,10);
-      window.addEventListener('resize',()=>{renderChart();if(state.mapLoaded)state.leaflet.invalidateSize();});
+      window.addEventListener('resize',()=>{if(state.ready)renderChart();if(state.mapLoaded)state.leaflet.invalidateSize();toggleCal(false);});
     }
     document.addEventListener('DOMContentLoaded',setup);
   </script>

@@ -20,8 +20,11 @@ while ($listener.IsListening) {
         $path = $ctx.Request.Url.LocalPath
         if ($path -eq "/compare") {
             $file = (Get-ChildItem $root -Filter *benchmark*.html | Select-Object -First 1).FullName
+        } elseif ($path -eq "/report") {
+            $file = (Get-ChildItem $root -Filter *技术报告*.html | Select-Object -First 1).FullName
         } elseif ($path -eq "/" -or $path -eq "/index.html") {
-            $file = (Get-ChildItem $root -Filter *.html | Where-Object Name -NotLike '*benchmark*' | Select-Object -First 1).FullName
+            # 主页固定为平台交互原型，排除对比页与技术报告
+            $file = (Get-ChildItem $root -Filter *.html | Where-Object { $_.Name -NotLike '*benchmark*' -and $_.Name -NotLike '*技术报告*' } | Select-Object -First 1).FullName
         } else {
             $file = Join-Path $root ([uri]::UnescapeDataString($path).TrimStart("/"))
             # 禁止通过 HTTP 访问 .env 等密钥文件
@@ -43,6 +46,7 @@ while ($listener.IsListening) {
                 ".png"  { "image/png" }
                 ".jpg"  { "image/jpeg" }
                 ".svg"  { "image/svg+xml" }
+                ".csv"  { "text/csv; charset=utf-8" }
                 default { "application/octet-stream" }
             }
             $ctx.Response.ContentType = $mime
