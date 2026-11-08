@@ -9,3 +9,14 @@
 # 系统垃圾
 Thumbs.db
 .DS_Store
+
+# 所有 zip 压缩包（含子目录，兼容大小写）
+*.zip
+*.ZIP
+
+# 日报文件夹内容（本地工作文件）
+日报/
+
+# 详细对比报告（本地生成，不纳入版本库）
+/2026_h1_detailed_comparison.md
+/2026_h3_detailed_comparison.md

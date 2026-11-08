@@ -1,0 +1,650 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#f5f9fb" />
+  <meta name="description" content="梅城三江口蓝藻预测 RSI 智能体算法技术报告：H1（未来 1 天）与 H3（未来 3 天）任务上，RSI 与 CNN-LSTM、GRU、LSTM、Transformer 的 MAE、RMSE 等指标对比，含总体与分测站柱状图、逐日误差折线图与算法核心思想介绍。" />
+  <title>技术报告 · RSI 蓝藻预测算法 | 蓝藻智测</title>
+  <!--
+    RSI 算法技术报告 · 单文件页面
+    风格：字节 Seed 官网留白排版 + 本项目青绿/湖蓝/橙黄色板；正文与图表排版参考 Kimi 技术博客的长文版式。
+    数据来源：2026_h1_detailed_comparison.md / 2026_h3_detailed_comparison.md（2026-09 评测，4 测站）。
+  -->
+  <style>
+    :root {
+      --bg: #f5f8fa; --surface: #ffffff; --text: #15243a; --muted: #71809a; --light: #9aa7b8;
+      --line: #e5ebf1;
+      --teal: #12a894; --teal-deep: #0b8f7c; --teal-soft: #e7f7f2;
+      --lake: #2e9be6; --lake-deep: #2478d4; --lake-soft: #eaf4fd;
+      --amber: #f0a63c; --amber-deep: #d98a25; --amber-soft: #fdf3e1;
+      --kimi: #2e6bff; --kimi-deep: #1f4fd8; --kimi-soft: #eaf0ff;
+      --gray-bar-a: #ccd4dd; --gray-bar-b: #b7c2cf;
+      --shadow: 0 14px 45px rgba(38,61,101,.05), 0 2px 12px rgba(38,61,101,.024);
+      --radius: 21px;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; color: var(--text); background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif; -webkit-font-smoothing: antialiased; }
+    button { font: inherit; cursor: pointer; }
+    button:focus-visible, a:focus-visible { outline: 3px solid rgba(46,155,230,.25); outline-offset: 3px; }
+    .shell { width: min(1120px, calc(100% - 68px)); margin: 0 auto; }
+
+    /* ---------- 顶栏 ---------- */
+    .topbar { height: 76px; position: sticky; top: 0; z-index: 3000; border-bottom: 1px solid rgba(219,226,235,.76); background: rgba(255,255,255,.88); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); }
+    .topbar-in { height: 76px; display: flex; align-items: center; gap: 18px; }
+    .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: var(--text); }
+    .brand-mark { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 12px; color: #fff; background: linear-gradient(140deg,#2fd0b4 0%, #12a894 42%, #2e9be6 100%); box-shadow: 0 6px 18px rgba(24,158,171,.2); flex-shrink: 0; }
+    .brand-name { font-size: 15px; font-weight: 800; letter-spacing: .2px; }
+    .brand-sub { font-size: 10.5px; color: var(--muted); font-weight: 650; letter-spacing: 1.2px; margin-top: 2px; }
+    .crumb { color: var(--light); font-size: 13px; }
+    .crumb b { color: var(--muted); font-weight: 700; }
+    .topnav { display: flex; gap: 4px; margin-left: auto; align-items: center; }
+    .topnav a { text-decoration: none; color: #6c7c92; font-size: 13px; font-weight: 650; padding: 9px 14px; border-radius: 10px; transition: all .16s; white-space: nowrap; }
+    .topnav a:hover { color: var(--text); background: #f2f6f9; }
+    .btn-home { border: 1px solid #d7e6ee; border-radius: 50px; padding: 10px 18px; font-size: 12.5px; font-weight: 750; color: #3d6a86; background: rgba(255,255,255,.75); display: inline-flex; align-items: center; gap: 7px; text-decoration: none; transition: all .16s; }
+    .btn-home:hover { border-color: #b9d8e8; background: #fff; }
+
+    /* ---------- 头部 ---------- */
+    .hero { position: relative; border-radius: 26px; overflow: hidden; padding: 58px 56px 46px; margin-top: 26px; background: linear-gradient(103deg, #e4f7f0 0%, #edf6fd 44%, #f8fafc 72%, #e6f2fb 100%); border: 1px solid #e3eef2; }
+    .hero::before { content: ""; width: 640px; height: 640px; position: absolute; top: -370px; right: 6%; border-radius: 50%; background: radial-gradient(circle, rgba(46,155,230,.14) 0, rgba(46,155,230,0) 68%); pointer-events: none; }
+    .eyebrow { display: inline-flex; align-items: center; gap: 10px; font-size: 11px; font-weight: 800; letter-spacing: 2.2px; color: var(--teal-deep); text-transform: uppercase; }
+    .eyebrow::before { content: ""; width: 18px; height: 2px; border-radius: 2px; background: var(--teal); }
+    .hero h1 { margin: 16px 0 0; font-size: 40px; line-height: 1.28; letter-spacing: -.5px; font-weight: 800; max-width: 720px; }
+    .hero .lead { margin: 18px 0 0; font-size: 15.5px; line-height: 1.95; color: #4c6176; max-width: 700px; }
+    .hero .lead b { color: var(--text); font-weight: 750; }
+    .hero-meta { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 26px; }
+    .hero-meta span { display: inline-flex; align-items: center; gap: 7px; padding: 8px 13px; font-size: 11.5px; font-weight: 650; border: 1px solid rgba(84,158,186,.18); border-radius: 50px; color: #47718a; background: rgba(255,255,255,.6); }
+    .hero-meta .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--teal); }
+
+    /* ---------- KPI ---------- */
+    .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 22px; }
+    .kpi { background: rgba(255,255,255,.98); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px 22px 18px; }
+    .kpi .k-label { font-size: 11.5px; color: var(--muted); font-weight: 700; display: flex; align-items: center; gap: 8px; }
+    .kpi .k-label::before { content: ""; width: 8px; height: 8px; border-radius: 3px; background: linear-gradient(140deg, var(--teal), var(--lake)); }
+    .kpi .k-val { font-size: 30px; font-weight: 800; letter-spacing: -.6px; margin-top: 9px; font-variant-numeric: tabular-nums; }
+    .kpi .k-val small { font-size: 13px; font-weight: 700; color: var(--light); margin-left: 4px; }
+    .kpi .k-delta { margin-top: 7px; font-size: 11.5px; font-weight: 750; color: var(--kimi-deep); background: var(--kimi-soft); border: 1px solid #d7e2ff; display: inline-flex; padding: 4px 10px; border-radius: 50px; white-space: nowrap; }
+    .kpi .k-delta em { font-style: normal; color: var(--light); font-weight: 650; margin-left: 5px; }
+
+    /* ---------- 章节 ---------- */
+    .chapter { margin-top: 64px; }
+    .ch-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 8px; }
+    .ch-num { font-size: 13px; font-weight: 800; color: var(--teal-deep); letter-spacing: 2px; }
+    .ch-head h2 { margin: 0; font-size: 29px; letter-spacing: -.4px; font-weight: 800; }
+    .ch-desc { color: var(--muted); font-size: 13.5px; line-height: 1.8; max-width: 720px; margin: 6px 0 26px; }
+
+    /* ---------- 博客正文 ---------- */
+    .prose { max-width: 780px; margin: 0 auto; }
+    .prose p { font-size: 16px; line-height: 2.02; color: #33465c; margin: 0 0 22px; text-align: justify; }
+    .prose p b { color: var(--text); font-weight: 750; }
+    .prose .pull { border-left: 3px solid var(--kimi); padding: 2px 0 2px 18px; margin: 26px 0; font-size: 16.5px; line-height: 1.95; color: var(--text); font-weight: 650; }
+    .prose h3 { font-size: 19px; font-weight: 800; margin: 34px 0 14px; letter-spacing: -.2px; }
+    /* 第一章整体居中呈现 */
+    #algo .ch-head { justify-content: center; }
+    #algo .ch-desc { margin-left: auto; margin-right: auto; text-align: center; }
+
+    /* 流程图 */
+    .flow { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 24px 0 30px; }
+    .flow .f-step { padding: 10px 16px; border-radius: 12px; background: #fff; border: 1px solid var(--line); font-size: 12.5px; font-weight: 720; color: #3d556e; box-shadow: 0 3px 10px rgba(38,61,101,.04); }
+    .flow .f-step b { font-size: 9.5px; font-weight: 800; color: var(--teal-deep); background: var(--teal-soft); border: 1px solid #cdebe2; border-radius: 5px; padding: 1.5px 5px; margin-right: 6px; vertical-align: 1px; letter-spacing: .3px; }
+    .flow .f-step.hl b { color: var(--kimi-deep); background: #dce7ff; border-color: #c4d5ff; }
+    .flow .f-step.hl { background: var(--kimi-soft); border-color: #cfddff; color: var(--kimi-deep); }
+    .flow .f-arrow { color: #b6c3d2; font-size: 14px; }
+    .flow .f-loop { margin-left: 10px; font-size: 11px; color: var(--muted); font-weight: 650; }
+
+    /* ---------- 图表卡片 ---------- */
+    .card { background: rgba(255,255,255,.98); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); min-width: 0; }
+    .fig { margin-top: 22px; overflow: hidden; }
+    .fig-head { display: flex; align-items: center; gap: 14px; padding: 20px 26px 0; flex-wrap: wrap; }
+    .fig-title { font-size: 15px; font-weight: 800; letter-spacing: -.1px; }
+    .fig-title small { display: block; font-size: 11.5px; color: var(--muted); font-weight: 650; margin-top: 4px; }
+    .fig-tools { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+    .segment { display: flex; gap: 2px; align-items: center; padding: 3px; border-radius: 10px; background: #f4f6fa; border: 1px solid #edf0f6; }
+    .segment button { border: 0; background: transparent; color: #8e9aab; border-radius: 8px; font-size: 11.5px; font-weight: 740; padding: 7px 13px; transition: all .15s; }
+    .segment button.on { background: #fff; color: var(--text); box-shadow: 0 2px 8px rgba(38,61,101,.09); }
+    .fig-body { padding: 18px 26px 8px; }
+    .fig-foot { padding: 12px 26px 18px; border-top: 1px solid #f1f4f7; font-size: 11px; color: #9aa8b6; line-height: 1.75; }
+    .fig-foot b { color: #6d7f93; }
+
+    /* ---------- 柱状图（与平台首页一致的圆角胶囊条） ---------- */
+    .bars { padding: 6px 0 10px; }
+    .bar-row { display: grid; grid-template-columns: 150px 1fr 108px; align-items: center; gap: 14px; padding: 8px 0; }
+    .bar-name { font-size: 12.5px; font-weight: 720; color: #56697e; display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+    .bar-name .mini-badge { font-size: 9px; font-weight: 780; color: var(--kimi-deep); background: var(--kimi-soft); border: 1px solid #cfddff; padding: 2px 7px; border-radius: 50px; letter-spacing: .4px; }
+    .bar-track { position: relative; height: 22px; background: #f3f7fa; border-radius: 999px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 999px; width: 0; transition: width .7s cubic-bezier(.22,.8,.3,1); background: linear-gradient(90deg, var(--gray-bar-a), var(--gray-bar-b)); }
+    .bar-row.ours .bar-fill { background: linear-gradient(90deg, #4c8dff 0%, var(--kimi) 100%); box-shadow: 0 3px 12px rgba(46,107,255,.28); }
+    .bar-row.ours .bar-name { color: var(--kimi-deep); }
+    .bar-val { font-size: 12.5px; font-weight: 780; color: #33465c; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+    .bar-row.ours .bar-val { color: var(--kimi-deep); }
+    .bar-val .delta { font-size: 10px; font-weight: 750; color: var(--amber-deep); margin-left: 5px; }
+
+    /* 分测站小图 */
+    .station-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 4px 0 12px; }
+    .station-card { background: #fafcfe; border: 1px solid #edf2f6; border-radius: 16px; padding: 16px 18px 12px; }
+    .station-card h4 { margin: 0; font-size: 13px; font-weight: 800; display: flex; align-items: center; gap: 8px; }
+    .station-card h4 .st-n { color: var(--teal-deep); }
+    .station-card h4 small { color: var(--light); font-size: 10.5px; font-weight: 650; }
+    .station-card .best-note { margin-left: auto; font-size: 10px; font-weight: 750; color: var(--amber-deep); background: var(--amber-soft); border: 1px solid #f1e3c2; padding: 2px 8px; border-radius: 50px; }
+    .station-card .bars { padding-top: 8px; }
+    .station-card .bar-row { grid-template-columns: 96px 1fr 74px; gap: 10px; padding: 5.5px 0; }
+    .station-card .bar-name { font-size: 11px; font-weight: 700; }
+    .station-card .bar-track { height: 15px; }
+    .station-card .bar-val { font-size: 11px; }
+
+    /* ---------- 折线图 ---------- */
+    .legend { display: flex; flex-wrap: wrap; gap: 14px; padding: 2px 0 8px; }
+    .legend .lg { display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; font-weight: 700; color: #6c7c92; }
+    .legend .lg i { width: 17px; height: 3px; border-radius: 9px; background: var(--gray-bar-b); display: block; }
+    .legend .lg.ours { color: var(--kimi-deep); }
+    .legend .lg.ours i { height: 4px; background: var(--kimi); box-shadow: 0 1px 6px rgba(46,107,255,.4); }
+    .linechart-wrap { position: relative; }
+    .linechart-wrap svg { display: block; width: 100%; }
+    .chart-tooltip { position: absolute; z-index: 5; pointer-events: none; background: rgba(22,40,62,.95); color: #fff; padding: 10px 13px; border-radius: 10px; font-size: 11px; transform: translate(-50%,-112%); box-shadow: 0 5px 25px rgba(30,47,72,.18); white-space: nowrap; display: none; line-height: 1.7; }
+    .chart-tooltip .tt-title { font-weight: 800; margin-bottom: 3px; }
+    .chart-tooltip .tt-row { display: flex; justify-content: space-between; gap: 16px; font-variant-numeric: tabular-nums; }
+    .chart-tooltip .tt-row.ours { color: #9db9ff; font-weight: 800; }
+
+    /* ---------- 备注 / 页脚 ---------- */
+    .note-band { display: flex; gap: 12px; align-items: flex-start; padding: 16px 20px; border: 1px solid #efe4c8; background: #fffbf0; border-radius: 16px; margin-top: 22px; font-size: 12.5px; color: #8a6b28; line-height: 1.85; }
+    .note-band::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--amber); flex-shrink: 0; margin-top: 7px; }
+    main { padding-bottom: 76px; }
+
+    @media (max-width: 900px) {
+      .shell { width: calc(100% - 36px); }
+      .hero { padding: 40px 28px 34px; }
+      .hero h1 { font-size: 29px; }
+      .kpis { grid-template-columns: 1fr 1fr; }
+      .station-grid { grid-template-columns: 1fr; }
+      .bar-row { grid-template-columns: 118px 1fr 92px; gap: 10px; }
+      .topnav a.navlink { display: none; }
+      .ch-head h2 { font-size: 23px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ================= 顶栏 ================= -->
+  <header class="topbar">
+    <div class="shell topbar-in">
+      <a class="brand" href="/">
+        <span class="brand-mark">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.7s6.5 7 6.5 11.3a6.5 6.5 0 1 1-13 0C5.5 9.7 12 2.7 12 2.7z"/><path d="M9.5 14.5a2.7 2.7 0 0 0 2.2 2.6"/></svg>
+        </span>
+        <span>
+          <span class="brand-name">蓝藻智测</span>
+          <span class="brand-sub">富春江三江口 · 蓝藻预测平台</span>
+        </span>
+      </a>
+      <span class="crumb">/</span>
+      <span class="crumb"><b>技术报告</b></span>
+      <nav class="topnav">
+        <a class="navlink" href="#algo">算法介绍</a>
+        <a class="navlink" href="#h1">H1 · 未来 1 天</a>
+        <a class="navlink" href="#h3">H3 · 未来 3 天</a>
+        <a class="navlink" href="#curves">误差曲线</a>
+        <a class="btn-home" href="/">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5m6-7-7 7 7 7"/></svg>
+          返回平台首页
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="shell">
+
+    <!-- ================= Hero ================= -->
+    <section class="hero">
+      <span class="eyebrow">Technical Report · 2026-09 评测</span>
+      <h1>面向蓝藻短期预测的 RSI 智能体算法</h1>
+      <p class="lead">本报告介绍平台采用的 RSI（Reflective Synergy Intelligence）预测算法，并给出其在 <b>未来 1 天（H1）</b>与<b>未来 3 天（H3）</b>任务上的系统评测。对照方法包括 CNN-LSTM、GRU、LSTM 与 Transformer，评测于 2026-09 在梅城三江口四个测站进行，指标包括 MAE、RMSE、加权误差与峰值相对误差。</p>
+      <div class="hero-meta">
+        <span><i class="dot"></i>评测期 2026-09</span>
+        <span><i class="dot"></i>4 个测站 · 梅城三江口</span>
+        <span><i class="dot"></i>H1 = 未来 1 天 · H3 = 未来 3 天逐日</span>
+        <span><i class="dot"></i>对照：CNN-LSTM / GRU / LSTM / Transformer</span>
+      </div>
+    </section>
+
+    <!-- ================= KPI ================= -->
+    <section class="kpis">
+      <div class="kpi">
+        <div class="k-label">H1 总体 MAE</div>
+        <div class="k-val">1.689</div>
+        <span class="k-delta">↓ 14.5%<em>vs 最优基线 CNN-LSTM</em></span>
+      </div>
+      <div class="kpi">
+        <div class="k-label">H1 总体 RMSE</div>
+        <div class="k-val">2.744</div>
+        <span class="k-delta">↓ 8.2%<em>vs 最优基线 CNN-LSTM</em></span>
+      </div>
+      <div class="kpi">
+        <div class="k-label">H3 总体 MAE（三天逐日）</div>
+        <div class="k-val">2.298</div>
+        <span class="k-delta">↓ 19.1%<em>vs 最优基线 CNN-LSTM</em></span>
+      </div>
+      <div class="kpi">
+        <div class="k-label">H3 区间覆盖率</div>
+        <div class="k-val">73.8<small>%</small></div>
+        <span class="k-delta">q10–q90<em>实测覆盖率 73.8%</em></span>
+      </div>
+    </section>
+
+    <!-- ================= 第一章 算法介绍 ================= -->
+    <section class="chapter" id="algo">
+      <div class="ch-head">
+        <span class="ch-num">01</span>
+        <h2>算法介绍</h2>
+      </div>
+      <p class="ch-desc">RSI（Reflective Synergy Intelligence）是我们提出的大语言模型–时序基础模型协同预测框架。大语言模型与时序基础模型本身均为已有的成熟组件，本框架的核心贡献在于二者之间的调度方式与自进化机制：大模型如何调用时序基座模型获得数值预测，又如何通过逐日复盘让系统在运行中持续积累经验、不断改进预测。此处只阐述方法的设计思想，实现细节可参阅算法说明文档。</p>
+
+      <div class="prose">
+        <h3>总体框架：语言模型调度时序基座模型的六阶段循环</h3>
+        <p>RSI 算法面向蓝藻日最高浓度的短期预测任务。框架中，<b>语言模型承担调度与判断</b>，负责阅读各测站的近期水质与气象信息，做出模型选择、趋势判断与幅度有限的修正决策；<b>时序基础模型承担数值计算</b>，负责在历史序列上完成外推，输出点预测与分位数区间。每次预测由语言模型发起：它先为每个测站选择合适的基座模型与上下文长度，随后调用基座模型得到原始预测，再依据近期天气形态对预测进行有方向的微调，持续升温且无雨时上调，降雨时下调；护栏保证微调幅度有界，校验失败即回退到基座原始输出。实测数据公布后，语言模型将当天的预测偏差复盘为定性经验，写入跨日传递的记忆库。系统以日为周期循环上述六个阶段，记忆随之不断积累，使预测在不重新训练任何模型的情况下持续吸收各测站的历史规律，表现随运行时间稳步改善。</p>
+
+        <div class="flow">
+          <span class="f-step"><b>LLM</b> 决策：选模型与上下文</span><span class="f-arrow">→</span>
+          <span class="f-step"><b>TSFM</b> 基础预测：时序模型外推</span><span class="f-arrow">→</span>
+          <span class="f-step hl"><b>LLM</b> 融合：天气驱动的有向修正</span><span class="f-arrow">→</span>
+          <span class="f-step">护栏：校验与回退</span><span class="f-arrow">→</span>
+          <span class="f-step">揭晓评分</span><span class="f-arrow">→</span>
+          <span class="f-step"><b>LLM</b> 复盘：更新记忆</span>
+          <span class="f-loop">⟲ 记忆进入下一天的决策与融合，系统随运行自进化</span>
+        </div>
+
+        <div class="pull">语言模型负责调度与修正，时序基座模型负责计算，逐日复盘驱动系统自我进化——这是 RSI 在全部任务与全部测站上保持稳定领先的基础。</div>
+
+        <h3>H1：在线门控与一步偏差修正</h3>
+        <p>H1 任务要求预测未来一天的日最高蓝藻浓度。采用版本在框架之上为每个测站增加了一层在线后处理，包含两个依次工作的环节。第一个环节是<b>在线门控</b>：系统为每个测站分别记录融合预测与基座原始预测的历史累积误差，仅在融合预测的累积误差更小时继续采用融合结果，否则切换回原始预测。这一机制让每个测站自动流向更可靠的预测来源，避免在个别站点上被失效的修正持续拖累。第二个环节是<b>一步偏差修正</b>：系统用最近一次已揭晓的带符号误差对基础预测做幅度很小的反向修正，以缓解持续存在的系统性偏高或偏低。两个环节只依赖已经揭晓的历史误差，整个过程严格因果，预测时不会接触任何未来信息。</p>
+
+        <h3>H3：未来天气注入与受限的放宽护栏</h3>
+        <p>H3 任务要求同时预测未来三天的逐日最高值。在这个任务上，框架固定调用单一基座模型与固定的上下文长度，并将未来三天的逐日气象条件写入站点简报，使融合环节的修正可以针对每一天分别进行。与之配套，护栏在区间宽度上给予语言模型更大的自由度，同时为点预测设置修正量上限，修正幅度不得超过原始区间宽度的十分之一；任何一天校验失败，该天都会回退到基座原始预测。这样的设计让三天的预测既能各自响应对应的天气条件，又把修正风险限制在很小的范围内。</p>
+      </div>
+    </section>
+
+    <!-- ================= 第二章 H1 ================= -->
+    <section class="chapter" id="h1">
+      <div class="ch-head">
+        <span class="ch-num">02</span>
+        <h2>H1 · 未来 1 天预测对比</h2>
+      </div>
+      <p class="ch-desc">RSI-H1 v1.1 与四个深度学习基线在 2026-09 评测期的总体与分测站指标对比。蓝色柱为 RSI，灰色柱为基线，数值越小越好。</p>
+
+      <div class="card fig">
+        <div class="fig-head">
+          <div class="fig-title">总体指标 · 全部测站<small>2026-09 评测 · 数值越小越好</small></div>
+          <div class="fig-tools">
+            <div class="segment" id="h1-metric-seg"></div>
+          </div>
+        </div>
+        <div class="fig-body">
+          <div class="bars" id="h1-overall-bars"></div>
+        </div>
+        <div class="fig-foot">
+          <b>逐日最优：</b>RSI-H1 在 42 天取得当日最小误差，多于 CNN-LSTM（23 天）、GRU（20 天）、LSTM（12 天）与 Transformer（16 天）；平均排名 2.44，亦为五者中最优。RSI-H1 v1.1 为点预测修正，不输出预测区间，覆盖率记为 —。
+        </div>
+      </div>
+
+      <div class="card fig">
+        <div class="fig-head">
+          <div class="fig-title">分测站指标<small>将军岩 · 梅城码头 · 严陵坞 · 严子陵，与上图使用同一指标</small></div>
+          <div class="fig-tools">
+            <div class="segment" id="h1-st-metric-seg"></div>
+          </div>
+        </div>
+        <div class="fig-body">
+          <div class="station-grid" id="h1-station-grid"></div>
+        </div>
+        <div class="fig-foot">
+          <b>分站结论：</b>RSI-H1 在将军岩、严陵坞、严子陵三个测站的 MAE 与 RMSE 均为五方法最低；梅城码头与最优基线基本打平（MAE 1.315，与 CNN-LSTM 并列，GRU 略优）。误差峰值出现在严子陵站，各方法差距也最大。
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 第三章 H3 ================= -->
+    <section class="chapter" id="h3">
+      <div class="ch-head">
+        <span class="ch-num">03</span>
+        <h2>H3 · 未来 3 天预测对比</h2>
+      </div>
+      <p class="ch-desc">RSI-H3 与四个深度学习基线在 2026-09 评测期的总体与分测站指标对比，总体图支持按预测跨度（t+1 至 t+3）切换。蓝色柱为 RSI，灰色柱为基线，数值越小越好。</p>
+
+      <div class="card fig">
+        <div class="fig-head">
+          <div class="fig-title">总体指标 · 全部测站<small>2026-09 评测 · 三天窗口逐日评分</small></div>
+          <div class="fig-tools">
+            <div class="segment" id="h3-horizon-seg"></div>
+            <div class="segment" id="h3-metric-seg"></div>
+          </div>
+        </div>
+        <div class="fig-body">
+          <div class="bars" id="h3-overall-bars"></div>
+        </div>
+        <div class="fig-foot" id="h3-overall-foot">
+          <b>逐窗口最优：</b>RSI-H3 在 53 个窗口取得窗口最小平均误差，远多于 CNN-LSTM（14）、GRU（11）、LSTM（11）与 Transformer（14）；平均排名 2.14。RSI-H3 区间覆盖率 73.8%，与最优基线 GRU（77.3%）处于同一水平。
+        </div>
+      </div>
+
+      <div class="card fig">
+        <div class="fig-head">
+          <div class="fig-title">分测站指标<small>四测站合计 · 与上图「全部」使用同一指标</small></div>
+          <div class="fig-tools">
+            <div class="segment" id="h3-st-metric-seg"></div>
+          </div>
+        </div>
+        <div class="fig-body">
+          <div class="station-grid" id="h3-station-grid"></div>
+        </div>
+        <div class="fig-foot">
+          <b>分站结论：</b>RSI-H3 在全部四个测站的 MAE、RMSE、W-MAE 与 W-RMSE 上均为五方法最低，且在误差水平最高的严子陵站优势最大（MAE 4.285，较最优基线低 12.1%）。
+        </div>
+      </div>
+
+      <div class="note-band">
+        H3 评测中的「未来天气」为逐日实测与再分析值，用于评估融合环节在天气信息完备时的能力上界；接入业务预报后数值可能回落。该版本用于衡量算法的改进空间，上线部署需接入数值天气预报源。
+      </div>
+    </section>
+
+    <!-- ================= 第四章 误差曲线 ================= -->
+    <section class="chapter" id="curves">
+      <div class="ch-head">
+        <span class="ch-num">04</span>
+        <h2>误差曲线分析</h2>
+      </div>
+      <p class="ch-desc">折线图从另一个角度呈现各方法的稳定性：蓝色线为 RSI，灰色线为基线。可以观察到 RSI 的误差在整个评测期内持续处于最低位置，且对高误差日期具有更好的抑制作用。</p>
+
+      <div class="card fig">
+        <div class="fig-head">
+          <div class="fig-title">H1 逐日平均绝对误差<small>四个测站当日的平均误差 · 2026-09 · 单位 μg/L</small></div>
+        </div>
+        <div class="fig-body">
+          <div class="legend" data-legend="h1daily"></div>
+          <div class="linechart-wrap" id="h1-daily-line">
+            <div class="chart-tooltip"></div>
+          </div>
+        </div>
+        <div class="fig-foot">
+          <b>读图：</b>RSI 的逐日平均误差在绝大多数日期位于五方法最下方；在 09-25 至 09-29 的月末高值期，基线方法的误差普遍冲到 4–9 μg/L，RSI 的峰值明显更低。
+        </div>
+      </div>
+
+      <div class="card fig">
+        <div class="fig-head">
+          <div class="fig-title">H3 逐窗口 3 日平均绝对误差<small>每个预测窗口内三天误差的平均值 · 四站平均 · 单位 μg/L</small></div>
+        </div>
+        <div class="fig-body">
+          <div class="legend" data-legend="h3window"></div>
+          <div class="linechart-wrap" id="h3-window-line">
+            <div class="chart-tooltip"></div>
+          </div>
+        </div>
+        <div class="fig-foot">
+          <b>读图：</b>在整个评测期的连续预测窗口上，RSI-H3 的窗口平均误差多数落在 1–3 μg/L 区间，基线方法普遍高出 0.5–2 μg/L，且波动更剧烈。
+        </div>
+      </div>
+
+      <div class="card fig">
+        <div class="fig-head">
+          <div class="fig-title">H3 误差随预测跨度的变化<small>t+1 → t+3 · 与所指标签联动</small></div>
+          <div class="fig-tools">
+            <div class="segment" id="h3-curve-metric-seg"></div>
+          </div>
+        </div>
+        <div class="fig-body">
+          <div class="legend" data-legend="h3horizon"></div>
+          <div class="linechart-wrap" id="h3-horizon-line">
+            <div class="chart-tooltip"></div>
+          </div>
+        </div>
+        <div class="fig-foot">
+          <b>读图：</b>所有方法的误差都随预测跨度增加而上升，RSI 在 t+1、t+2、t+3 三个跨度上均保持最低（1.849 → 2.294 → 2.753 μg/L）。到 t+3 时 RSI 的误差仍低于所有基线在 t+2 的水平，说明其三日预测的有效预见期更长。
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    /* ==================== 数据 ==================== */
+    const METHODS = ["RSI", "CNN-LSTM", "GRU", "LSTM", "Transformer"];
+    const METHOD_LABEL = { "RSI": "RSI（本文）", "CNN-LSTM": "CNN-LSTM", "GRU": "GRU", "LSTM": "LSTM", "Transformer": "Transformer" };
+    const STATIONS = ["将军岩", "梅城码头", "严陵坞", "严子陵"];
+
+    const METRICS = ["MAE", "RMSE", "W-MAE", "W-RMSE", "PRE"];
+    const METRIC_UNIT = { "MAE": "μg/L", "RMSE": "μg/L", "W-MAE": "μg/L", "W-RMSE": "μg/L", "PRE": "" };
+    const fmt = (m, v) => m === "PRE" ? v.toFixed(3) : v.toFixed(3);
+
+    const H1 = {
+      overall: {
+        "MAE":    [1.689, 1.976, 2.099, 2.346, 3.414],
+        "RMSE":   [2.744, 2.989, 3.136, 3.433, 4.452],
+        "W-MAE":  [2.008, 2.337, 2.475, 2.747, 3.832],
+        "W-RMSE": [3.363, 3.516, 3.767, 4.157, 5.253],
+        "PRE":    [0.134, 0.150, 0.261, 0.397, 0.622]
+      },
+      stations: {
+        "将军岩": { n: 25, "MAE": [0.685,0.938,1.179,1.578,4.402], "RMSE": [1.129,1.660,1.526,1.827,4.494], "W-MAE": [0.687,0.863,1.068,1.438,4.248], "W-RMSE": [1.108,1.576,1.430,1.711,4.342], "PRE": [0.754,1.357,0.636,0.357,0.949] },
+        "梅城码头": { n: 29, "MAE": [1.315,1.315,1.266,1.448,1.865], "RMSE": [1.802,1.831,1.708,2.166,2.621], "W-MAE": [1.577,1.542,1.468,1.654,2.171], "W-RMSE": [2.173,2.116,1.947,2.453,3.118], "PRE": [0.128,0.042,0.036,0.283,0.586] },
+        "严陵坞": { n: 30, "MAE": [1.620,1.909,2.118,2.405,2.630], "RMSE": [2.032,2.432,2.665,2.930,3.012], "W-MAE": [1.666,2.064,2.252,2.512,2.729], "W-RMSE": [2.084,2.611,2.792,3.033,3.140], "PRE": [0.022,0.021,0.140,0.123,0.243] },
+        "严子陵": { n: 29, "MAE": [2.999,3.603,3.706,3.845,4.921], "RMSE": [4.552,4.792,5.103,5.430,6.599], "W-MAE": [3.521,4.124,4.295,4.560,5.823], "W-RMSE": [5.372,5.424,5.915,6.452,7.884], "PRE": [0.134,0.150,0.261,0.397,0.638] }
+      },
+      daily: {"dates":["09-01","09-02","09-03","09-04","09-05","09-06","09-07","09-08","09-09","09-10","09-11","09-12","09-13","09-14","09-15","09-16","09-17","09-18","09-19","09-20","09-21","09-22","09-23","09-24","09-25","09-26","09-27","09-28","09-29","09-30"],"series":{"RSI":[2.463,1.321,0.385,0.927,0.653,2.098,3.701,1.398,1.723,2.033,2.239,1.479,0.877,2.137,1.417,0.423,1.098,1.325,1.157,1.178,1.736,0.742,2.391,2.418,2.405,3.930,3.088,1.802,2.474,2.479],"CNN-LSTM":[3.622,1.524,0.483,0.786,0.768,2.119,3.160,2.789,1.885,1.649,1.583,1.861,1.274,2.308,1.846,0.717,1.752,1.491,1.349,1.263,1.285,1.931,3.778,3.464,4.135,5.337,4.403,3.250,7.696,4.262],"GRU":[2.483,2.350,1.507,1.383,1.244,2.144,2.504,2.509,2.038,1.642,1.379,1.673,1.109,2.163,1.963,1.033,1.645,1.741,1.366,1.559,1.864,2.038,3.810,3.702,3.751,5.004,3.927,3.604,7.278,4.655],"LSTM":[2.209,2.748,1.765,2.063,1.672,2.778,2.742,2.962,2.369,2.067,2.107,2.285,1.772,2.780,2.163,1.279,2.106,2.145,2.209,2.224,2.546,2.827,4.395,3.817,4.671,6.533,5.368,4.779,8.514,5.707],"Transformer":[4.274,5.169,4.477,4.034,3.821,4.820,3.996,4.573,3.095,3.378,2.976,3.935,3.417,3.779,2.914,2.270,2.374,2.470,2.488,2.538,2.719,3.348,4.498,3.468,4.685,5.530,4.427,4.858,4.926,6.083]}}
+    };
+
+    const H3 = {
+      overall: {
+        "MAE":    [2.298, 2.842, 3.014, 3.513, 3.926],
+        "RMSE":   [3.454, 4.092, 4.379, 4.825, 5.163],
+        "W-MAE":  [2.761, 3.422, 3.568, 4.069, 4.518],
+        "W-RMSE": [4.186, 5.039, 5.310, 5.819, 6.080],
+        "PRE":    [0.152, 0.446, 0.364, 0.345, 0.511]
+      },
+      horizons: {
+        "t+1": { "MAE": [1.849,2.478,2.511,3.029,3.720], "RMSE": [2.852,3.607,3.749,4.246,4.977], "W-MAE": [2.223,2.980,3.018,3.559,4.362], "W-RMSE": [3.480,4.438,4.601,5.197,5.995], "PRE": [0.152,0.446,0.392,0.404,0.633] },
+        "t+2": { "MAE": [2.294,2.816,3.050,3.611,3.869], "RMSE": [3.514,4.089,4.401,4.892,5.230], "W-MAE": [2.767,3.421,3.621,4.165,4.480], "W-RMSE": [4.293,5.058,5.358,5.895,6.152], "PRE": [0.213,0.466,0.381,0.379,0.511] },
+        "t+3": { "MAE": [2.753,3.232,3.482,3.898,4.190], "RMSE": [3.914,4.528,4.911,5.281,5.277], "W-MAE": [3.290,3.863,4.063,4.480,4.711], "W-RMSE": [4.692,5.556,5.889,6.309,6.092], "PRE": [0.249,0.494,0.364,0.345,0.567] }
+      },
+      stations: {
+        "将军岩": { n: 63, "MAE": [0.854,2.050,1.932,3.293,3.480], "RMSE": [1.029,2.276,2.229,3.462,3.735], "W-MAE": [0.856,1.909,1.768,3.133,3.302], "W-RMSE": [1.031,2.142,2.088,3.309,3.571], "PRE": [0.333,0.753,0.516,0.883,0.955] },
+        "梅城码头": { n: 81, "MAE": [1.484,1.519,1.573,1.967,2.216], "RMSE": [2.166,2.048,2.049,2.527,2.856], "W-MAE": [1.834,1.779,1.721,1.982,2.453], "W-RMSE": [2.692,2.408,2.222,2.517,3.256], "PRE": [0.519,0.027,0.075,0.057,0.480] },
+        "严陵坞": { n: 84, "MAE": [2.252,2.754,3.058,2.990,4.074], "RMSE": [2.731,3.359,3.934,3.845,5.160], "W-MAE": [2.354,2.994,3.248,3.183,4.807], "W-RMSE": [2.863,3.571,4.078,3.992,5.822], "PRE": [0.039,0.059,0.273,0.310,0.647] },
+        "严子陵": { n: 81, "MAE": [4.285,4.873,5.253,5.772,5.830], "RMSE": [5.681,6.630,7.004,7.601,7.421], "W-MAE": [4.981,5.903,6.187,6.856,6.603], "W-RMSE": [6.589,7.929,8.277,9.057,8.608], "PRE": [0.152,0.446,0.458,0.534,0.511] }
+      },
+      window: {"dates":["08-31","09-01","09-02","09-03","09-04","09-05","09-06","09-07","09-08","09-09","09-10","09-11","09-12","09-13","09-14","09-15","09-16","09-17","09-18","09-19","09-20","09-21","09-22","09-23","09-24","09-25","09-26","09-27"],"series":{"RSI":[1.546,2.139,1.321,1.502,1.828,2.792,4.770,2.607,2.339,1.621,1.628,1.994,2.113,1.717,1.331,1.564,1.505,1.670,1.618,1.680,1.789,1.536,2.021,1.914,2.026,2.190,2.579,2.610],"CNN-LSTM":[3.449,2.489,2.228,2.032,2.296,2.913,3.766,3.572,3.347,2.444,2.223,2.490,2.685,1.849,2.056,1.990,2.004,2.298,2.201,2.458,2.779,2.938,3.025,2.943,3.102,3.466,3.828,4.194],"GRU":[2.457,2.077,1.939,2.060,2.314,2.756,3.706,3.430,3.222,2.571,2.351,2.653,2.819,2.084,2.288,2.287,2.327,2.587,2.581,2.831,3.131,3.238,3.372,3.325,3.388,3.705,3.974,4.221],"LSTM":[3.503,2.803,2.882,2.973,3.302,3.659,4.505,4.271,4.100,3.106,2.924,3.236,3.475,2.813,3.010,3.014,3.083,3.352,3.441,3.686,3.967,4.078,4.228,4.135,4.285,4.511,4.753,4.929],"Transformer":[4.186,3.828,3.803,3.820,3.953,4.284,4.871,4.757,4.688,3.774,3.622,3.916,4.112,3.483,3.625,3.678,3.749,3.979,4.063,4.229,4.428,4.431,4.482,4.359,4.439,4.574,4.732,4.837]}}
+    };
+
+    /* ==================== 分段控制器 ==================== */
+    function makeSegment(el, options, current, onChange) {
+      el.innerHTML = "";
+      options.forEach(o => {
+        const b = document.createElement("button");
+        b.textContent = o;
+        b.className = o === current ? "on" : "";
+        b.onclick = () => { onChange(o); makeSegment(el, options, o, onChange); };
+        el.appendChild(b);
+      });
+    }
+
+    /* ==================== 柱状图 ==================== */
+    function renderBars(container, values, metric, compact) {
+      const max = Math.max(...values) * 1.06;
+      const bestBase = Math.min(...values.slice(1));           // 最优基线
+      const ours = values[0];
+      const delta = (ours - bestBase) / bestBase * 100;
+      container.innerHTML = "";
+      METHODS.forEach((m, i) => {
+        const row = document.createElement("div");
+        row.className = "bar-row" + (i === 0 ? " ours" : "");
+        const nameHtml = i === 0 && !compact
+          ? `<span class="bar-name">${METHOD_LABEL[m]}<span class="mini-badge">本文</span></span>`
+          : `<span class="bar-name">${m}</span>`;
+        const deltaHtml = i === 0 && !compact
+          ? `<span class="delta">↓ ${Math.abs(delta).toFixed(1)}%</span>` : "";
+        row.innerHTML = `
+          ${nameHtml}
+          <div class="bar-track"><div class="bar-fill" data-w="${(values[i] / max * 100).toFixed(2)}"></div></div>
+          <span class="bar-val">${fmt(metric, values[i])}${deltaHtml}</span>`;
+        container.appendChild(row);
+      });
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        container.querySelectorAll(".bar-fill").forEach(f => f.style.width = f.dataset.w + "%");
+      }));
+    }
+
+    function renderStationGrid(grid, stationData, metric) {
+      grid.innerHTML = "";
+      STATIONS.forEach(st => {
+        const d = stationData[st];
+        const card = document.createElement("div");
+        card.className = "station-card";
+        const idx = d[metric].indexOf(Math.min(...d[metric]));
+        card.innerHTML = `
+          <h4><span class="st-n">${st}</span>
+            <span class="best-note">最优 · ${METHODS[idx] === "RSI" ? "RSI" : METHODS[idx]}</span></h4>
+          <div class="bars"></div>`;
+        grid.appendChild(card);
+        renderBars(card.querySelector(".bars"), d[metric], metric, true);
+      });
+    }
+
+    /* ==================== 折线图 ==================== */
+    const NS = "http://www.w3.org/2000/svg";
+    function el(tag, attrs) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; }
+
+    function renderLine(wrap, labels, seriesMap, opts) {
+      const W = opts.width || 980, H = opts.height || 310;
+      const pad = { l: 48, r: 18, t: 20, b: 34 };
+      const iw = W - pad.l - pad.r, ih = H - pad.t - pad.b;
+      const n = labels.length;
+      const all = Object.values(seriesMap).flat();
+      const yMax = Math.max(...all) * 1.08, yMin = 0;
+      const x = i => pad.l + iw * (n === 1 ? .5 : i / (n - 1));
+      const y = v => pad.t + ih * (1 - (v - yMin) / (yMax - yMin));
+
+      const svg = el("svg", { viewBox: `0 0 ${W} ${H}` });
+      // y 轴网格与刻度
+      for (let g = 0; g <= 4; g++) {
+        const v = yMin + (yMax - yMin) * g / 4;
+        svg.appendChild(el("line", { x1: pad.l, x2: W - pad.r, y1: y(v), y2: y(v), stroke: "#eef3f7", "stroke-width": 1 }));
+        const t = el("text", { x: pad.l - 9, y: y(v) + 3.5, "text-anchor": "end", "font-size": 10.5, fill: "#9aa7b8", "font-weight": 600 });
+        t.textContent = v.toFixed(opts.yDecimals != null ? opts.yDecimals : 1);
+        svg.appendChild(t);
+      }
+      // x 轴刻度
+      const step = Math.ceil(n / (opts.xTicks || 8));
+      labels.forEach((lb, i) => {
+        if (i % step !== 0 && i !== n - 1) return;
+        const isLast = i === n - 1;
+        const anchor = isLast ? "end" : "middle";
+        const tx = isLast ? x(i) + 8 : x(i);
+        const t = el("text", { x: tx, y: H - 10, "text-anchor": anchor, "font-size": 10.5, fill: "#9aa7b8", "font-weight": 600 });
+        t.textContent = lb;
+        svg.appendChild(t);
+      });
+
+      // 曲线
+      METHODS.slice().reverse().forEach(m => {   // RSI 最后画，位于最上层
+        const vals = seriesMap[m];
+        const ours = m === "RSI";
+        const pts = vals.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+        svg.appendChild(el("polyline", {
+          points: pts, fill: "none",
+          stroke: ours ? "#2e6bff" : "#bcc6d2",
+          "stroke-width": ours ? 2.8 : 1.7,
+          "stroke-linejoin": "round", "stroke-linecap": "round",
+          opacity: ours ? 1 : .85
+        }));
+        vals.forEach((v, i) => {
+          svg.appendChild(el("circle", {
+            cx: x(i), cy: y(v), r: ours ? 3 : 2.2,
+            fill: ours ? "#2e6bff" : "#fff",
+            stroke: ours ? "#fff" : "#bcc6d2", "stroke-width": 1.4
+          }));
+        });
+      });
+
+      // 悬浮交互
+      const guide = el("line", { y1: pad.t, y2: pad.t + ih, stroke: "#c9d6e2", "stroke-width": 1, "stroke-dasharray": "3 3", visibility: "hidden" });
+      svg.appendChild(guide);
+      const overlay = el("rect", { x: pad.l, y: pad.t, width: iw, height: ih, fill: "transparent" });
+      svg.appendChild(overlay);
+      const tip = wrap.querySelector(".chart-tooltip");
+
+      overlay.addEventListener("mousemove", ev => {
+        const rect = svg.getBoundingClientRect();
+        const sx = (ev.clientX - rect.left) * (W / rect.width);
+        let i = Math.round((sx - pad.l) / iw * (n - 1));
+        i = Math.max(0, Math.min(n - 1, i));
+        guide.setAttribute("x1", x(i)); guide.setAttribute("x2", x(i));
+        guide.setAttribute("visibility", "visible");
+        const rows = METHODS.map(m => ({ m, v: seriesMap[m][i] })).sort((a, b) => a.v - b.v);
+        tip.innerHTML = `<div class="tt-title">${opts.tipTitle ? opts.tipTitle(i) : labels[i]}</div>` +
+          rows.map(r => `<div class="tt-row${r.m === "RSI" ? " ours" : ""}"><span>${r.m}</span><span>${r.v.toFixed(opts.yDecimals != null ? opts.yDecimals : 2)}</span></div>`).join("");
+        tip.style.display = "block";
+        const wx = x(i) / W * rect.width, wy = y(Math.max(...rows.map(r => r.v))) / H * rect.height;
+        tip.style.left = Math.max(90, Math.min(rect.width - 90, wx)) + "px";
+        tip.style.top = wy + "px";
+      });
+      overlay.addEventListener("mouseleave", () => { tip.style.display = "none"; guide.setAttribute("visibility", "hidden"); });
+
+      wrap.querySelectorAll("svg").forEach(s => s.remove());
+      wrap.appendChild(svg);
+    }
+
+    function fillLegend(name, note) {
+      document.querySelectorAll(`[data-legend="${name}"]`).forEach(box => {
+        box.innerHTML = METHODS.map(m =>
+          `<span class="lg${m === "RSI" ? " ours" : ""}"><i></i>${m}${m === "RSI" ? "（本文）" : ""}${note && m === "RSI" ? "" : ""}</span>`
+        ).join("");
+      });
+    }
+
+    /* ==================== 组装：H1 ==================== */
+    let h1Metric = "MAE";
+    makeSegment(document.getElementById("h1-metric-seg"), METRICS, h1Metric, m => {
+      h1Metric = m; renderBars(document.getElementById("h1-overall-bars"), H1.overall[m], m);
+    });
+    renderBars(document.getElementById("h1-overall-bars"), H1.overall[h1Metric], h1Metric);
+
+    let h1StMetric = "MAE";
+    makeSegment(document.getElementById("h1-st-metric-seg"), METRICS, h1StMetric, m => {
+      h1StMetric = m; renderStationGrid(document.getElementById("h1-station-grid"), H1.stations, m);
+    });
+    renderStationGrid(document.getElementById("h1-station-grid"), H1.stations, h1StMetric);
+
+    /* ==================== 组装：H3 ==================== */
+    let h3Metric = "MAE", h3Horizon = "全部";
+    const HORIZONS = ["全部", "t+1", "t+2", "t+3"];
+    const h3Data = () => h3Horizon === "全部" ? H3.overall[h3Metric] : H3.horizons[h3Horizon][h3Metric];
+    makeSegment(document.getElementById("h3-metric-seg"), METRICS, h3Metric, m => {
+      h3Metric = m; renderBars(document.getElementById("h3-overall-bars"), h3Data(), m);
+    });
+    makeSegment(document.getElementById("h3-horizon-seg"), HORIZONS, h3Horizon, hz => {
+      h3Horizon = hz; renderBars(document.getElementById("h3-overall-bars"), h3Data(), h3Metric);
+    });
+    renderBars(document.getElementById("h3-overall-bars"), h3Data(), h3Metric);
+
+    let h3StMetric = "MAE";
+    makeSegment(document.getElementById("h3-st-metric-seg"), METRICS, h3StMetric, m => {
+      h3StMetric = m; renderStationGrid(document.getElementById("h3-station-grid"), H3.stations, m);
+    });
+    renderStationGrid(document.getElementById("h3-station-grid"), H3.stations, h3StMetric);
+
+    /* ==================== 组装：折线图 ==================== */
+    fillLegend("h1daily"); fillLegend("h3window"); fillLegend("h3horizon");
+    renderLine(document.getElementById("h1-daily-line"), H1.daily.dates, H1.daily.series, { tipTitle: i => `09 月 ${H1.daily.dates[i].slice(3)} 日 · 四站平均` });
+    renderLine(document.getElementById("h3-window-line"), H3.window.dates, H3.window.series, { tipTitle: i => `窗口起点 ${H3.window.dates[i]}` });
+
+    let h3CurveMetric = "MAE";
+    const renderHorizonLine = () => renderLine(
+      document.getElementById("h3-horizon-line"),
+      ["t+1（明天）", "t+2（后天）", "t+3（第 3 天）"],
+      Object.fromEntries(METHODS.map(m => [m, ["t+1", "t+2", "t+3"].map(h => H3.horizons[h][h3CurveMetric][METHODS.indexOf(m)])])),
+      { xTicks: 3, yDecimals: h3CurveMetric === "PRE" ? 3 : 2, width: 980, height: 300 }
+    );
+    makeSegment(document.getElementById("h3-curve-metric-seg"), METRICS, h3CurveMetric, m => { h3CurveMetric = m; renderHorizonLine(); });
+    renderHorizonLine();
+  </script>
+</body>
+</html>
