@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#f7f9fc" />
-  <meta name="description" content="梅城三江口蓝藻浓度预测平台。RSI 模型 2026 年 9 月回测数据，站间热力为沿河道插值示意，非实时预报。" />
+  <meta name="description" content="梅城三江口蓝藻浓度预测平台。RSI 模型 2026 年 9 月预测结果，站间热力为沿河道插值示意，仅供参考。" />
   <title>蓝藻智测 · 梅城三江口预测平台 | 前端设计原型</title>
   <!--
     蓝藻预测 Web UI · 交付学生的单文件设计原型
@@ -193,14 +193,13 @@
     .alert .expand {border:0;background:transparent;color:#a9b4c1;margin-left:auto;padding:0;}
     .alert-detail {display:none;margin-top:7px;font-size:10px;line-height:1.65;color:#6e8191;}
     .alert.is-open .alert-detail {display:block;}
-    .data-bar {margin-top:18px;padding:19px 22px;display:grid;grid-template-columns:1.05fr repeat(4,1fr) 1.1fr; align-items:center;gap:13px;}
+    .data-bar {margin-top:18px;padding:19px 22px;display:grid;grid-template-columns:1.05fr repeat(4,1fr); align-items:center;gap:clamp(10px,1.4vw,20px);}
     .data-bar-head {font-weight:780;font-size:13px;}
     .data-bar-head span {display:block;font-size:10px;color:#a0afbc;font-weight:510;margin-top:5px;}
-    .data-item {padding-left:13px;border-left:1px solid #e9edf3;display:flex;align-items:center;gap:9px;min-width:0;}
+    .data-item {padding-left:clamp(10px,1.2vw,18px);border-left:1px solid #e9edf3;display:flex;align-items:center;gap:9px;min-width:0;}
     .data-item .d-icon {width:30px;height:30px;display:grid;place-items:center;border-radius:10px;background:#f1f6fc;color:#4d8adc;flex-shrink:0;}
     .data-item h4 {font-size:11px;font-weight:750;margin:0 0 4px;white-space:nowrap;}
     .data-item p {font-size:10px;color:#a5b0bd;margin:0;white-space:nowrap;}
-    .export-btn {border:1px solid #d8e7fa;background:#f3f8ff;color:#2e75dc;border-radius:10px;font-size:11px;font-weight:750;padding:11px 12px;display:flex;align-items:center;justify-content:center;gap:7px;white-space:nowrap;}
     footer {padding:25px 6px 0;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;color:#9faab8;font-size:10px;line-height:1.6;}
     .leaflet-container {font-family:inherit;}
     .leaflet-control-attribution {font-size:9px!important;}
@@ -248,9 +247,9 @@
       .main-grid,.lower-grid {grid-template-columns:1.05fr 1fr;}
       .map-bottom {flex-wrap:wrap;}
       .station-strip {width:100%;}
-      .data-bar {grid-template-columns:1fr repeat(2,1fr);}
-      .data-item:nth-of-type(4) {border-left:0;padding-left:0;}
-      .export-btn {grid-column:3;}
+      .data-bar {grid-template-columns:repeat(2,1fr);}
+      .data-bar-head {grid-column:1/-1;}
+      .data-item {border-left:0;padding-left:0;}
     }
     @media(max-width:920px) {
       .main-grid,.lower-grid {grid-template-columns:1fr;}
@@ -259,9 +258,6 @@
       .map-body {height:420px;}
       .hero-right {position:static;align-items:flex-start;margin-top:16px;}
       .hero {padding:26px 27px;}
-      .data-bar {grid-template-columns:repeat(2,1fr);}
-      .data-bar-head,.export-btn {grid-column:span 2;}
-      .data-item {border-left:0;padding-left:0;}
     }
     @media(max-width:570px) {
       .shell {width:calc(100% - 26px);}
@@ -294,7 +290,6 @@
     <symbol id="ic-thermo" viewBox="0 0 24 24"><path d="M10 14V5a3 3 0 0 1 6 0v9a5 5 0 1 1-6 0Z"/><path d="M13 8v9"/></symbol>
     <symbol id="ic-warning" viewBox="0 0 24 24"><path d="M10.4 4.5a1.8 1.8 0 0 1 3.2 0L22 19a2 2 0 0 1-1.7 3H3.7A2 2 0 0 1 2 19L10.4 4.5Z"/><path d="M12 9v5m0 4h.01"/></symbol>
     <symbol id="ic-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m7.5 12 3.1 3.1 6-6.2"/></symbol>
-    <symbol id="ic-download" viewBox="0 0 24 24"><path d="M12 3v12m-4-4 4 4 4-4M4 16v5h16v-5"/></symbol>
     <symbol id="ic-pin" viewBox="0 0 24 24"><path d="M20 10c0 5.5-8 11-8 11S4 15.5 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></symbol>
     <symbol id="ic-play" viewBox="0 0 24 24"><path d="m7 4 13 8-13 8V4Z"/></symbol>
     <symbol id="ic-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol>
@@ -318,7 +313,7 @@
         <button data-scroll="datasources">数据来源</button>
       </nav>
       <div class="top-actions">
-        <span class="demo-pill" title="预测值读取自 web_data/forecast_rsi.csv，为 2026 年 9 月回测结果">RSI 回测 · 2026-09</span>
+        <span class="demo-pill" title="RSI 模型 2026 年 9 月预测结果，仅供参考">RSI 预测 · 2026-09</span>
         <button class="icon-btn" id="aboutBtn" title="关于原型" aria-label="关于原型"><svg class="icon"><use href="#ic-info"/></svg></button>
       </div>
     </div>
@@ -341,7 +336,7 @@
       <article class="card kpi kpi-horizon"><div class="kpi-main"><div class="kpi-label">预测时间窗口</div><div class="value" id="horizonKpi">3<small>天</small></div><div class="foot">可切换未来 1 天 / 3 天</div></div><span class="kpi-icon"><svg class="icon"><use href="#ic-clock"/></svg></span></article>
     </section>
 
-    <div class="section-row"><h2>流域时空态势</h2><p>RSI 回测数据 · 2026 年 9 月 / 非实时 / 站间热力为沿河道插值示意</p></div>
+    <div class="section-row"><h2>流域时空态势</h2><p>RSI 预测数据 · 2026 年 9 月 / 非实时 / 站间热力为沿河道插值示意</p></div>
     <section class="main-grid" aria-label="地图与时间序列预测">
       <article class="card panel" id="riskmap">
         <div class="panel-head">
@@ -396,24 +391,24 @@
           <div class="slider-wrap"><div style="min-width:0; flex:1"><span class="tiny">风险演变时间轴 · 未来 3 天（T+1 RSI-H1 · T+2/T+3 RSI-H3）</span><input id="daySlider" type="range" class="time-slider" min="1" max="3" value="1" aria-label="选择预测天数" /></div><span class="date-chip" id="dayLabel">—</span></div>
         </div>
         <div class="map-bottom" style="border-top:1px solid #f2f4f7;min-height:53px;padding-top:9px;padding-bottom:11px"><span style="font-size:10px;color:#9aabb7;white-space:nowrap">测站切换</span><div class="station-strip" id="stationStrip"></div></div>
-        <div class="map-footer-note">热力为各测站 RSI 预测值沿河道距离插值的空间示意，非模型栅格输出；站点坐标为按影像估计的位置，可在 web_data/stations.csv 中修改。</div>
+        <div class="map-footer-note">热力为各测站 RSI 预测值沿河道距离插值的空间示意；站点坐标为估计位置，仅供参考。</div>
       </article>
 
       <article class="card panel" id="forecast">
         <div class="panel-head">
           <div class="panel-title"><span class="h-icon"><svg class="icon"><use href="#ic-chart"/></svg></span><div><h3>关键水质指标时序预测</h3><p id="stationNameHeader">—</p></div></div>
-          <div class="head-controls"><div class="segment" aria-label="预测时间范围"><button data-horizon="1">1 天</button><button class="active" data-horizon="3">3 天</button></div></div>
+          <div class="head-controls"><a class="head-tab" href="/report" title="查看 RSI 算法的原理介绍与 H1/H3 评测对比">算法技术报告 ↗</a><div class="segment" aria-label="预测时间范围"><button data-horizon="1">1 天</button><button class="active" data-horizon="3">3 天</button></div></div>
         </div>
         <div class="forecast-body">
           <div class="forecast-top"><span class="name" id="metricLabel">蓝藻浓度预测（日最大值）</span><span class="unit" id="metricUnit">μg/L</span></div>
-          <div class="legend-inline"><span><i class="line-key"></i> 历史实测</span><span><i class="line-key future"></i> RSI 预测</span><span><i class="band-key"></i> q10–q90 区间（H3）</span><span><i class="act-key"></i> 实测（回测）</span></div>
+          <div class="legend-inline"><span><i class="line-key"></i> 历史实测</span><span><i class="line-key future"></i> RSI 预测</span><span><i class="band-key"></i> q10–q90 区间（H3）</span><span><i class="act-key"></i> 同期实测</span></div>
           <div class="chart-wrap" id="chartWrap"><svg id="forecast-chart" role="img" aria-label="蓝藻浓度历史实测、RSI 预测与预测区间图表" viewBox="0 0 600 270" preserveAspectRatio="none"></svg><div class="chart-tooltip" id="chartTooltip"></div></div>
           <div class="chart-note"><span>预测起点：<strong id="baseNote">—</strong>　|　虚线后为 RSI 预测</span><span>点击或悬停查看数值</span></div>
         </div>
         <div class="forecast-insights" aria-label="预测摘要">
           <div class="insight"><div class="s-title">预测窗口内峰值</div><div class="s-value" id="peakVal">—</div><div class="s-foot" id="peakDate">—</div></div>
           <div class="insight"><div class="s-title">超出演示阈值天数</div><div class="s-value" id="overDays">—</div><div class="s-foot">阈值 10 μg/L · 非实际预警标准</div></div>
-          <div class="insight"><div class="s-title">窗口内回测 MAE</div><div class="s-value" id="maeVal" style="color:#1ca58d">—</div><div class="s-foot" id="maeFoot">RSI 预测 vs 实测</div></div>
+          <div class="insight"><div class="s-title">窗口内 MAE</div><div class="s-value" id="maeVal" style="color:#1ca58d">—</div><div class="s-foot" id="maeFoot">RSI 预测 vs 实测</div></div>
         </div>
       </article>
     </section>
@@ -424,20 +419,19 @@
         <div class="drivers" id="driversGrid"></div>
       </article>
       <article class="card" id="alerts">
-        <div class="lower-head"><h3>风险预警与研究建议</h3><span class="head-right"><span class="hint" id="alertsHint">来源：监测预警日报</span><a class="head-tab" id="reportTab" href="pages/daily_report.html" title="打开当天 Word 日报的 HTML 版（蓝藻浓度为 RSI 预测）">当日日报 HTML 版 ↗</a></span></div>
+        <div class="lower-head"><h3>风险预警与研究建议</h3><span class="head-right"><span class="hint" id="alertsHint">来源：监测预警日报</span><a class="head-tab" id="reportTab" href="pages/daily_report.html" title="查看当日监测预警日报">当日日报 ↗</a></span></div>
         <div class="alert-list" id="alertList"></div>
       </article>
     </section>
 
-    <section class="card data-bar" id="datasources" aria-label="数据来源与导出">
+    <section class="card data-bar" id="datasources" aria-label="数据来源">
       <div class="data-bar-head">多源数据融合<span>已接入站点监测 / 气象再分析 / 监测预警日报</span></div>
       <div class="data-item"><span class="d-icon"><svg class="icon"><use href="#ic-satellite"/></svg></span><div><h4>卫星遥感</h4><p>水色 / 藻类特征</p></div></div>
       <div class="data-item"><span class="d-icon"><svg class="icon"><use href="#ic-wave"/></svg></span><div><h4>水文站点</h4><p>流量 / 水位 / 调度</p></div></div>
       <div class="data-item"><span class="d-icon"><svg class="icon"><use href="#ic-cloud"/></svg></span><div><h4>气象再分析</h4><p>气温 / 风 / 降水</p></div></div>
       <div class="data-item"><span class="d-icon"><svg class="icon"><use href="#ic-data"/></svg></span><div><h4>水质监测</h4><p>叶绿素 / 水温 / 溶解氧</p></div></div>
-      <button class="export-btn" id="exportBtn" type="button"><svg class="icon" style="width:15px;height:15px"><use href="#ic-download"/></svg>导出当前站点序列 CSV</button>
     </section>
-    <footer><span>© 2026 AlgaeAI Research Prototype · 梅城三江口研究可视化界面</span><span>免责声明：预测值为 RSI 模型 2026 年 9 月回测结果；站点坐标为估计值，空间热力为插值示意；驱动因子来自站点监测与气象再分析，风险等级与建议摘自对应日期的监测预警日报，不用于真实决策。</span></footer>
+    <footer><span>© 2026 AlgaeAI Research Prototype · 梅城三江口研究可视化界面</span><span>免责声明：本页预测值为 RSI 模型 2026 年 9 月预测结果，仅供参考；站点坐标为估计值，空间热力为插值示意；驱动因子来自站点监测与气象再分析，风险等级与建议摘自对应日期的监测预警日报。</span></footer>
   </main>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
@@ -565,7 +559,7 @@
           if(i<=fidx)html=`${md(p.date)} · <em>${i===fidx?'基准日实测':'历史实测'}</em><br><strong>${p.v==null?'无实测数据':fmt(p.v)+' μg/L'}</strong>`;
           else{html=`${md(p.date)} · <em>T+${p.k} · ${modelFor(p.k)}</em><br><strong>${p.v==null?'该日无 RSI 预测':'预测 '+fmt(p.v)+' μg/L'}</strong>`;
             if(p.v!=null)html+='<br>'+(p.lo!=null&&p.hi!=null?'区间 q10–q90：'+fmt(p.lo)+' – '+fmt(p.hi):'H1 为点预测（无区间）');
-            html+='<br>实测（回测）：'+(p.act==null?'—':fmt(p.act)+' μg/L');}
+            html+='<br>同期实测：'+(p.act==null?'—':fmt(p.act)+' μg/L');}
           tip.innerHTML=html;tip.style.left=Math.max(85,Math.min(rect.width-85,nx(i)/W*rect.width))+'px';tip.style.top=Math.max(60,ny(yv)/Hh*rect.height)+'px';tip.style.display='block';};
         el.addEventListener('mouseenter',show);el.addEventListener('click',show);el.addEventListener('mouseleave',()=>tip.style.display='none');});
     }
@@ -686,15 +680,6 @@
       state.timer=setInterval(()=>{state.day++;$('daySlider').value=state.day;updateHeat();if(state.day>=3)playPause();},1200);
     }
     function zoomMap(delta){if(state.mapLoaded){state.leaflet.setZoom(state.leaflet.getZoom()+delta);}else{state.offlineZoom=Math.max(1,Math.min(1.8,state.offlineZoom+delta*.18));$('offline-svg').style.transform=`scale(${state.offlineZoom})`;}}
-    function downloadCSV(){
-      if(!state.ready)return;
-      const id=state.station,s=STATIONS[id],v=x=>x==null?'':Number(x).toFixed(3),name='"'+s.name.replace(/"/g,'""')+'"';
-      const lines=['date,station_id,station,stage,horizon,model,value_ugl,q10,q90,actual_ugl'];
-      for(let k=-6;k<=0;k++){const d=addDays(state.base,k);lines.push([d,id,name,'observed','','',v(obsAt(id,d)),'','',''].join(','));}
-      for(let h=1;h<=state.horizon;h++){const f=forecast(id,h);lines.push([addDays(state.base,h),id,name,'forecast',h,modelFor(h),v(f&&f.point),v(f&&f.q10),v(f&&f.q90),v(actualOf(id,h))].join(','));}
-      const blob=new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8;'}),url=URL.createObjectURL(blob),a=document.createElement('a');
-      a.href=url;a.download=`Meicheng_RSI_${id}_${state.base}_${state.horizon}d.csv`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),600);toast('已导出 '+s.name+' 序列 CSV');
-    }
     // ======================= 基准日日历（2026 年 9 月，仅 1–27 日可选） =======================
     function renderCalendar(){
       let h='一二三四五六日'.split('').map(w=>`<span class="cal-w">${w}</span>`).join('');
@@ -783,7 +768,7 @@
       return `<div class="sp-head"><div class="sp-name">${esc(s.full)}</div><div class="sp-sub">${dotted(target)} · 未来 ${d} 天预测 · ${modelFor(d)}</div></div><div class="sp-rows">`+
         popRow('预测浓度','μg/L',f?fmt(f.point):'该日无预测')+
         popRow('预测区间','q10–q90 · μg/L',!f?'—':f.q10!=null&&f.q90!=null?fmt(f.q10)+' – '+fmt(f.q90):'H1 点预测')+
-        popRow('实测（回测）','μg/L',fmt(actualOf(id,d)))+
+        popRow('同期实测','μg/L',fmt(actualOf(id,d)))+
         popRow('基准日实测',md(state.base)+' · μg/L',fmt(obsAt(id,state.base)))+
         `<div class="sp-row"><span class="k">浓度等级<small>演示分级</small></span>${lv}</div>`+
         popRow('所在河段','',esc(s.river||'—'))+'</div>'+(s.note?`<div class="sp-note">${esc(s.note)}</div>`:'');
@@ -852,8 +837,7 @@
       $('swVec').addEventListener('click',()=>setBasemap('vec'));
       $('zoomIn').addEventListener('click',()=>zoomMap(1));$('zoomOut').addEventListener('click',()=>zoomMap(-1));
       $('resetMap').addEventListener('click',()=>{state.offlineZoom=1;$('offline-svg').style.transform='scale(1)';if(state.mapLoaded)fitStations();toast('已显示全部测站');});
-      $('exportBtn').addEventListener('click',downloadCSV);
-      $('aboutBtn').addEventListener('click',()=>toast('预测读取 web_data/forecast_rsi.csv；驱动因子读取 drivers_daily.csv；风险与建议提取自对应日期日报（reports_daily.json）。站点坐标为估计值，热力为插值示意。',6000));
+      $('aboutBtn').addEventListener('click',()=>toast('预测为 RSI 模型结果；驱动因子来自站点监测与气象再分析；风险等级与建议摘自对应日期的监测预警日报。站点坐标为估计值，热力为插值示意，仅供参考。',6000));
       $('baseBtn').addEventListener('click',e=>{e.stopPropagation();toggleCal();});
       $('calGrid').addEventListener('click',e=>{const b=e.target.closest('button[data-date]');if(!b||b.disabled)return;toggleCal(false);if(b.dataset.date!==state.base){setBase(b.dataset.date);toast('基准日已切换为 '+dotted(b.dataset.date));}});
       document.addEventListener('click',e=>{if(!$('calPop').hidden&&!e.target.closest('#calPop,#baseBtn'))toggleCal(false);});
