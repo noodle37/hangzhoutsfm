@@ -160,6 +160,9 @@
     .lower-head {display:flex;justify-content:space-between;align-items:center;padding:20px 22px 0;}
     .lower-head h3 {font-size:14px;margin:0;font-weight:760;}
     .lower-head .hint {font-size:11px;color:#a9b4c0;}
+    .head-right {display:flex;align-items:center;gap:10px;min-width:0;flex-wrap:wrap;justify-content:flex-end;}
+    .head-tab {display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:750;color:#fff;text-decoration:none;padding:7px 13px;border-radius:999px;background:linear-gradient(120deg,#0f8f7d,#2f7fe0);box-shadow:0 3px 10px rgba(24,110,140,.28);transition:transform .18s,box-shadow .18s;white-space:nowrap;}
+    .head-tab:hover {transform:translateY(-1px);box-shadow:0 6px 16px rgba(24,110,140,.36);}
     .drivers {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding:17px 18px 18px;}
     .driver {padding:12px 13px 10px; background:#fafcfe;border:1px solid #edf1f6;border-radius:13px;min-width:0;}
     .driver-label {display:flex;align-items:center;justify-content:space-between; gap:4px;font-size:11px;color:#75889a;font-weight:700;}
@@ -175,9 +178,18 @@
     .alert .alert-icon {margin-top:1px; width:27px;height:27px;display:grid;place-items:center;border-radius:9px;background:#fff0d9;color:#dc954c; flex-shrink:0;}
     .alert.good {background:#f3fbf8;}
     .alert.good .alert-icon {background:#dff7ec;color:#20a381;}
+    .alert.danger {background:#fdf4f2;}
+    .alert.danger .alert-icon {background:#fbe0da;color:#d4553a;}
+    .alert > div {flex:1;min-width:0;}
+    .alert.danger .alert-title {color:#c2472e;}
+    .risk-table {width:100%;border-collapse:collapse;margin:7px 0 4px;font-size:9.5px;}
+    .risk-table th,.risk-table td {border:1px solid #e4ebf2;padding:4px 6px;text-align:left;line-height:1.5;}
+    .risk-table th {background:#f4f8fb;color:#5d7386;font-weight:750;white-space:nowrap;}
+    .risk-table td {color:#6e8191;}
     .alert .alert-title {font-size:12px;font-weight:765;line-height:1.4;color:#bd773c;}
     .alert.good .alert-title {color:#27896f;}
     .alert p {font-size:10.5px;color:#879aa4;line-height:1.6;margin:4px 0 0;}
+    .alert p.alert-src {font-size:9.5px;color:#a9b4c0;margin-top:3px;}
     .alert .expand {border:0;background:transparent;color:#a9b4c1;margin-left:auto;padding:0;}
     .alert-detail {display:none;margin-top:7px;font-size:10px;line-height:1.65;color:#6e8191;}
     .alert.is-open .alert-detail {display:block;}
@@ -408,34 +420,24 @@
 
     <section class="lower-grid" aria-label="环境驱动因素与风险预警">
       <article class="card" id="drivers">
-        <div class="lower-head"><h3>关键环境驱动因子</h3><span class="hint">多源环境变量 · 示意场景</span></div>
-        <div class="drivers" id="driversGrid">
-          <div class="driver" data-spark="28,29,30,29,31,32,31,33"><div class="driver-label"><span>🌡️ 气温</span><span class="mini-glyph">↗</span></div><div class="driver-value">30.2 <small>°C</small></div><div class="driver-foot"><span>近 7 日</span><span class="driver-trend hot">↑ 1.8 °C</span></div><svg class="spark" aria-hidden="true"></svg></div>
-          <div class="driver" data-spark="4.5,5.1,4.9,4.2,3.7,4.2,4.6,4.1"><div class="driver-label"><span>〰️ 风速</span><span class="mini-glyph">↘</span></div><div class="driver-value">4.6 <small>m/s</small></div><div class="driver-foot"><span>近 7 日</span><span class="driver-trend">↓ 0.8 m/s</span></div><svg class="spark" aria-hidden="true"></svg></div>
-          <div class="driver" data-spark="0,5,1,0.2,3,0.8,0.1,2.4"><div class="driver-label"><span>🌧️ 降水</span><span class="mini-glyph">↘</span></div><div class="driver-value">2.4 <small>mm</small></div><div class="driver-foot"><span>逐日值示意</span><span class="driver-trend">↓ 6.1 mm</span></div><svg class="spark" aria-hidden="true"></svg></div>
-          <div class="driver" data-spark=".03,.032,.036,.034,.038,.041,.04,.044"><div class="driver-label"><span>◉ 总磷</span><span class="mini-glyph">↗</span></div><div class="driver-value">0.068 <small>mg/L</small></div><div class="driver-foot"><span>外部营养盐指标</span><span class="driver-trend hot">↑ 0.012</span></div><svg class="spark" aria-hidden="true"></svg></div>
-          <div class="driver" data-spark="1.1,1.14,1.12,1.26,1.31,1.27,1.36,1.42"><div class="driver-label"><span>◉ 总氮</span><span class="mini-glyph">↗</span></div><div class="driver-value">1.42 <small>mg/L</small></div><div class="driver-foot"><span>外部营养盐指标</span><span class="driver-trend hot">↑ 0.08</span></div><svg class="spark" aria-hidden="true"></svg></div>
-          <div class="driver" data-spark="1.02,.99,.96,.94,.89,.86,.82,.78"><div class="driver-label"><span>≋ 透明度</span><span class="mini-glyph">↘</span></div><div class="driver-value">0.78 <small>m</small></div><div class="driver-foot"><span>Secchi 深度示意</span><span class="driver-trend">↓ 0.11 m</span></div><svg class="spark" aria-hidden="true"></svg></div>
-        </div>
+        <div class="lower-head"><h3>关键环境驱动因子</h3><span class="hint" id="driversHint">站点监测 + 气象再分析</span></div>
+        <div class="drivers" id="driversGrid"></div>
       </article>
       <article class="card" id="alerts">
-        <div class="lower-head"><h3>风险预警与研究建议</h3><span class="hint">依据演示阈值生成</span></div>
-        <div class="alert-list">
-          <div class="alert" id="alertA"><span class="alert-icon"><svg class="icon"><use href="#ic-warning"/></svg></span><div><div class="alert-title">未来 48 小时：汇流区风险抬升</div><p>模拟情景提示：新安江与兰江混合水域的蓝藻风险可能增加。</p><div class="alert-detail">验证要点：分支来水温差、流速、滞留时间、光照和营养盐浓度；设置事件级预警阈值并按实测记录校准。</div></div><button class="expand" data-alert="alertA" aria-label="展开预警说明" title="展开说明">⌄</button></div>
-          <div class="alert good" id="alertB"><span class="alert-icon"><svg class="icon"><use href="#ic-check"/></svg></span><div><div class="alert-title">建议关注三江口至富春江下游河段</div><p>优先展示监测点时间序列，以及预测不确定性的空间差异。</p><div class="alert-detail">研究建议：汇流前两支来水分别建模，比较简单拼接与水动力驱动的时空模型，并单独评估强降水和调度事件的泛化性。</div></div><button class="expand" data-alert="alertB" aria-label="展开研究建议" title="展开说明">⌄</button></div>
-        </div>
+        <div class="lower-head"><h3>风险预警与研究建议</h3><span class="head-right"><span class="hint" id="alertsHint">来源：监测预警日报</span><a class="head-tab" id="reportTab" href="pages/daily_report.html" title="打开当天 Word 日报的 HTML 版（蓝藻浓度为 RSI 预测）">当日日报 HTML 版 ↗</a></span></div>
+        <div class="alert-list" id="alertList"></div>
       </article>
     </section>
 
     <section class="card data-bar" id="datasources" aria-label="数据来源与导出">
-      <div class="data-bar-head">多源数据融合<span>未来可接入真实观测与预测接口</span></div>
+      <div class="data-bar-head">多源数据融合<span>已接入站点监测 / 气象再分析 / 监测预警日报</span></div>
       <div class="data-item"><span class="d-icon"><svg class="icon"><use href="#ic-satellite"/></svg></span><div><h4>卫星遥感</h4><p>水色 / 藻类特征</p></div></div>
       <div class="data-item"><span class="d-icon"><svg class="icon"><use href="#ic-wave"/></svg></span><div><h4>水文站点</h4><p>流量 / 水位 / 调度</p></div></div>
       <div class="data-item"><span class="d-icon"><svg class="icon"><use href="#ic-cloud"/></svg></span><div><h4>气象再分析</h4><p>气温 / 风 / 降水</p></div></div>
-      <div class="data-item"><span class="d-icon"><svg class="icon"><use href="#ic-data"/></svg></span><div><h4>水质监测</h4><p>叶绿素 / 营养盐</p></div></div>
+      <div class="data-item"><span class="d-icon"><svg class="icon"><use href="#ic-data"/></svg></span><div><h4>水质监测</h4><p>叶绿素 / 水温 / 溶解氧</p></div></div>
       <button class="export-btn" id="exportBtn" type="button"><svg class="icon" style="width:15px;height:15px"><use href="#ic-download"/></svg>导出当前站点序列 CSV</button>
     </section>
-    <footer><span>© 2026 AlgaeAI Research Prototype · 梅城三江口研究可视化界面</span><span>免责声明：预测值为 RSI 模型 2026 年 9 月回测结果；站点坐标为估计值，空间热力为插值示意；环境驱动因子与预警文案仍为演示，不用于真实决策。</span></footer>
+    <footer><span>© 2026 AlgaeAI Research Prototype · 梅城三江口研究可视化界面</span><span>免责声明：预测值为 RSI 模型 2026 年 9 月回测结果；站点坐标为估计值，空间热力为插值示意；驱动因子来自站点监测与气象再分析，风险等级与建议摘自对应日期的监测预警日报，不用于真实决策。</span></footer>
   </main>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
@@ -451,7 +453,8 @@
     const VMAX = 20;        // 色带满量程 μg/L
     const STATION_ORDER = ['jiangjunyan','meichengmatou','yanlingwu','yanziling'];
     const OFFLINE_POS = {meichengmatou:[442,311], jiangjunyan:[374,540], yanlingwu:[800,127], yanziling:[892,97]};
-    const STATIONS = {}, OBS = {}, FC = {};
+    const STATIONS = {}, OBS = {}, FC = {}, DRIVERS = {};
+    let REPORTS = {};
     const state = {base:BASE_DEFAULT, horizon:3, station:'meichengmatou', day:1, ready:false, offlineZoom:1, playing:false, timer:null, leaflet:null, leafletMarkers:{}, heat:null, basemap:'sat', tdtErrors:0, mapLoaded:false, geo:null};
     const $ = id => document.getElementById(id);
     const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -481,6 +484,16 @@
       fc.forEach(r=>{const p=num(r.point);if(p==null)return;
         FC[[r.station_id,r.origin_date,r.horizon,r.model].join('|')]={model:r.model,target:r.target_date,h:+r.horizon,point:p,q10:num(r.q10),q90:num(r.q90),actual:num(r.actual)};});
       if(!Object.keys(STATIONS).length)throw new Error('stations.csv 中没有有效站点');
+      // 驱动因子与日报为增量数据：缺失时页面其余功能不受影响
+      try{
+        (await loadCSV('drivers_daily.csv')).forEach(r=>{
+          const d={};['air_temp','wind','precip','water_temp','do','light'].forEach(k=>d[k]=num(r[k]));
+          (DRIVERS[r.station_id]||(DRIVERS[r.station_id]={}))[r.date]=d;});
+      }catch(e){console.warn('drivers_daily.csv 未加载：',e.message);}
+      try{
+        const r=await fetch(DATA_DIR+'reports_daily.json',{cache:'no-store'});
+        if(r.ok)REPORTS=await r.json();
+      }catch(e){console.warn('reports_daily.json 未加载：',e.message);}
     }
     const stationIds = () => [...STATION_ORDER.filter(id=>STATIONS[id]), ...Object.keys(STATIONS).filter(id=>!STATION_ORDER.includes(id))];
     // T+1 取 RSI-H1；T+2、T+3 取 RSI-H3（同一预测起点 origin_date = 基准日）
@@ -556,13 +569,84 @@
           tip.innerHTML=html;tip.style.left=Math.max(85,Math.min(rect.width-85,nx(i)/W*rect.width))+'px';tip.style.top=Math.max(60,ny(yv)/Hh*rect.height)+'px';tip.style.display='block';};
         el.addEventListener('mouseenter',show);el.addEventListener('click',show);el.addEventListener('mouseleave',()=>tip.style.display='none');});
     }
-    function renderSparks(){
-      document.querySelectorAll('.driver').forEach((el,i)=>{const v=el.dataset.spark.split(',').map(Number),lo=Math.min(...v),hi=Math.max(...v),y=x=>26-(x-lo)/Math.max(.001,hi-lo)*21;
-        let p=v.map((x,j)=>`${j*100/(v.length-1)},${y(x)}`).join(' ');
-        const colors=['#20ae8b','#4e92e8','#3f8dec','#ad75e3','#937ce6','#32b6b1'];
-        el.querySelector('.spark').setAttribute('viewBox','0 0 100 30');el.querySelector('.spark').setAttribute('preserveAspectRatio','none');
-        el.querySelector('.spark').innerHTML=`<polyline points="${p}" fill="none" stroke="${colors[i]}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>`;
-      });
+    // ======================= 环境驱动因子（drivers_daily.csv：气象再分析 + 站点监测日均值） =======================
+    const DRIVER_DEFS=[
+      {k:'air_temp',label:'🌡️ 气温',unit:'°C',dg:1,color:'#20ae8b',src:'气象再分析 · 日均'},
+      {k:'wind',label:'〰️ 风速',unit:'m/s',dg:1,color:'#4e92e8',src:'气象再分析 · 日最大'},
+      {k:'precip',label:'🌧️ 降水',unit:'mm',dg:1,color:'#3f8dec',src:'气象再分析 · 日累计'},
+      {k:'water_temp',label:'♨ 水温',unit:'°C',dg:1,color:'#e08a4c',src:'站点监测 · 日均'},
+      {k:'do',label:'◉ 溶解氧',unit:'mg/L',dg:2,color:'#937ce6',src:'站点监测 · 日均'},
+      {k:'light',label:'≋ 透光率',unit:'%',dg:1,color:'#32b6b1',src:'站点监测 · 日均'}
+    ];
+    function renderDrivers(){
+      const id=state.station,dd=DRIVERS[id]||{};
+      $('driversHint').textContent=`${STATIONS[id].name} · 基准日 ${dotted(state.base)} · 近 7 日走势`;
+      $('driversGrid').innerHTML=DRIVER_DEFS.map(def=>{
+        const days=[];for(let k=-6;k<=0;k++){const iso=addDays(state.base,k);days.push({iso,v:dd[iso]?dd[iso][def.k]:null});}
+        const cur=days[6].v,prev=days[5].v,vals=days.filter(p=>p.v!=null).map(p=>p.v);
+        let spark='';
+        if(vals.length>1){const lo=Math.min(...vals),hi=Math.max(...vals),y=v=>26-(v-lo)/Math.max(.001,hi-lo)*21;
+          const runs=[];let run=[];days.forEach((p,j)=>{if(p.v!=null)run.push(`${(j*100/6).toFixed(1)},${y(p.v).toFixed(1)}`);else{if(run.length>1)runs.push(run);run=[];}});
+          if(run.length>1)runs.push(run);
+          spark=runs.map(r=>`<polyline points="${r.join(' ')}" fill="none" stroke="${def.color}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>`).join('');
+          if(cur!=null)spark+=`<circle cx="100" cy="${y(cur).toFixed(1)}" r="2.6" fill="${def.color}"/>`;}
+        else if(vals.length===1)spark=`<circle cx="100" cy="15" r="2.6" fill="${def.color}"/>`;
+        else spark='<text x="50" y="19" text-anchor="middle" fill="#c3cdd8" font-size="9">近 7 日无数据</text>';
+        let trend='<span class="driver-trend" style="color:#a9b3c0">较昨日 —</span>';
+        if(cur!=null&&prev!=null){const dv=cur-prev,up=dv>0,flat=Math.abs(dv)<Math.pow(10,-def.dg)/2;
+          trend=`<span class="driver-trend${up?' hot':''}">${flat?'→ 持平':(up?'↑ ':'↓ ')+Math.abs(dv).toFixed(def.dg)+' '+def.unit}</span>`;}
+        return `<div class="driver"><div class="driver-label"><span>${def.label}</span><span class="mini-glyph">${cur!=null&&prev!=null?(cur>=prev?'↗':'↘'):'·'}</span></div>
+          <div class="driver-value">${cur==null?'—':cur.toFixed(def.dg)} <small>${def.unit}</small></div>
+          <div class="driver-foot"><span>${cur==null?'基准日无数据 · '+def.src:def.src}</span>${trend}</div>
+          <svg class="spark" viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true">${spark}</svg></div>`;
+      }).join('');
+    }
+    // ======================= 风险预警与研究建议（reports_daily.json：提取自对应日期的 Word 日报） =======================
+    const RISK_RANK={'低风险':0,'中风险':1,'较高风险':2,'高风险':3};
+    // 预警卡浓度一律取 RSI 预测（T+1=H1，T+2/3=H3）；概率与风险等级保留日报原文
+    function rsiConc(sid,date){const h=Math.round((Date.parse(date+'T00:00:00Z')-Date.parse(state.base+'T00:00:00Z'))/864e5);if(h<1||h>3)return null;const f=forecast(sid,h);return f?f.point:null;}
+    function renderAlerts(){
+      $('reportTab').href='pages/daily_report.html?date='+state.base;
+      const rep=REPORTS[state.base],list=$('alertList');
+      if(!rep){$('alertsHint').textContent='来源：监测预警日报';
+        list.innerHTML=`<div class="alert"><span class="alert-icon">${icon('ic-warning')}</span><div><div class="alert-title">${dotted(state.base)} 无对应日报数据</div><p>运行 tools/build_env_reports.ps1 可从 日报/ 文件夹重新提取。</p></div></div>`;return;}
+      $('alertsHint').textContent=`监测预警日报 · ${dotted(state.base)}${rep.issue?' · 第 '+esc(rep.issue)+' 期':''}`;
+      const risk=rep.risk||[],t1=addDays(state.base,1),tomorrow=risk.filter(r=>r.date===t1&&r.level);
+      let html='';
+      if(tomorrow.length){
+        const worst=tomorrow.reduce((a,b)=>(RISK_RANK[b.level]||0)>(RISK_RANK[a.level]||0)?b:a);
+        const rank=RISK_RANK[worst.level]||0,cls=rank===0?' good':rank>=2?' danger':'';
+        const summary=tomorrow.map(r=>{const c=rsiConc(r.station,r.date);return `${STATIONS[r.station]?STATIONS[r.station].name:r.station} RSI ${c!=null?fmt(c)+' μg/L':'无预测'}${r.prob!=null?' · '+fmt(r.prob,1)+'%':''} · ${r.level}`;}).join('；');
+        const dates=[...new Set(risk.map(r=>r.date))].sort();
+        const byKey={};risk.forEach(r=>byKey[r.station+'|'+r.date]=r);
+        let table=`<table class="risk-table"><tr><th>站点</th>${dates.map(d=>`<th>${md(d)}</th>`).join('')}</tr>`;
+        stationIds().forEach(sid=>{if(!risk.some(r=>r.station===sid))return;
+          table+=`<tr><td>${STATIONS[sid]?STATIONS[sid].name:sid}</td>${dates.map(d=>{const r=byKey[sid+'|'+d];if(!r||!r.level)return '<td>—</td>';const c=rsiConc(sid,d);
+            return `<td>${c!=null?fmt(c)+' μg/L':'无预测'} · ${r.level}${r.prob!=null?'（'+fmt(r.prob,1)+'%）':''}</td>`;}).join('')}</tr>`;});
+        table+='</table>';
+        const wx=(rep.weather||[]).find(w=>w.date===t1);
+        const wxLine=wx?`<br>明日天气：${esc(wx.cond)}，${wx.tmin}–${wx.tmax}℃，${esc(wx.wind)}；水华气象条件「${esc(wx.favorable)}」。`:'';
+        html+=`<div class="alert${cls}" id="alertA"><span class="alert-icon">${icon(rank===0?'ic-check':'ic-warning')}</span><div>
+          <div class="alert-title">${md(t1)} 水华风险预报：最高 ${esc(worst.level)}（${STATIONS[worst.station]?STATIONS[worst.station].name:esc(worst.station)}）</div>
+          <p>${esc(summary)}。</p>
+          <p class="alert-src">浓度：RSI 预测（T+1 取 H1，T+2–3 取 H3）· 概率与等级：日报表 2</p>
+          <div class="alert-detail">日报表 2 · 未来三天各站预报（RSI 浓度 · 等级 · 暴发概率）：${table}${wxLine}<br>等级依据《湖库蓝藻水华及湖泛短期预测预警技术规范》：低 ≤20%＜中 ≤40%＜较高 ≤60%＜高。</div></div>
+          <button class="expand" data-alert="alertA" aria-label="展开三日风险预报表" title="展开说明">⌄</button></div>`;
+      }else{
+        html+=`<div class="alert"><span class="alert-icon">${icon('ic-warning')}</span><div><div class="alert-title">${md(t1)} 日报未给出风险等级</div><p>该日日报表 2 无有效预报行。</p></div></div>`;
+      }
+      const advice=(rep.advice||'').trim();
+      if(advice&&advice!=='无。'){
+        const brief=advice.length>78?advice.slice(0,78)+'…':advice;
+        html+=`<div class="alert good" id="alertB"><span class="alert-icon">${icon('ic-check')}</span><div>
+          <div class="alert-title">日报建议（${dotted(state.base)}）</div><p>${esc(brief)}</p>
+          <div class="alert-detail">${esc(advice)}</div></div>
+          <button class="expand" data-alert="alertB" aria-label="展开日报建议全文" title="展开说明">⌄</button></div>`;
+      }else{
+        html+=`<div class="alert good" id="alertB"><span class="alert-icon">${icon('ic-check')}</span><div>
+          <div class="alert-title">日报建议（${dotted(state.base)}）</div><p>${advice==='无。'?'当日日报「五、建议」为「无」，无额外处置建议。':'当日日报无「建议」章节。'}</p></div></div>`;
+      }
+      list.innerHTML=html;
     }
     function updateLabels(){
       const id=state.station,st=STATIONS[id],d=state.day,target=addDays(state.base,d),f=forecast(id,d);
@@ -581,7 +665,7 @@
       if(!STATIONS[id])return;opt=opt||{};state.station=id;
       document.querySelectorAll('#stationStrip button').forEach(b=>b.classList.toggle('active',b.dataset.id===id));
       document.querySelectorAll('.map-point').forEach(el=>el.classList.toggle('active',el.dataset.station===id));
-      renderChart();updateLabels();updateMarkers();
+      renderChart();updateLabels();updateMarkers();renderDrivers();
       if(opt.fly&&state.mapLoaded)state.leaflet.flyTo([STATIONS[id].lat,STATIONS[id].lng],Math.max(state.leaflet.getZoom(),13),{duration:.8});
       if(!opt.silent)toast('已切换至 '+STATIONS[id].full);
     }
@@ -627,7 +711,7 @@
     }
     function setBase(iso){
       if(!(iso>=BASE_MIN&&iso<=BASE_MAX))return;
-      state.base=iso;$('baseLabel').textContent=dotted(iso);renderCalendar();renderChart();updateHeat();
+      state.base=iso;$('baseLabel').textContent=dotted(iso);renderCalendar();renderChart();updateHeat();renderDrivers();renderAlerts();
     }
     function showLoadError(err){
       const lines=location.protocol==='file:'?['直接双击打开 HTML 时浏览器禁止读取本地 CSV','请运行 serve.ps1 后访问 http://localhost:8000/']:['读取 web_data/*.csv 失败',String(err&&err.message||err)];
@@ -760,7 +844,6 @@
       } catch(err) {console.warn('Leaflet 初始化未完成，继续使用离线水系示意图。',err);}
     }
     async function setup(){
-      renderSparks();
       document.querySelectorAll('[data-horizon]').forEach(btn=>btn.addEventListener('click',()=>{if(!state.ready)return;state.horizon=Number(btn.dataset.horizon);document.querySelectorAll('[data-horizon]').forEach(x=>x.classList.toggle('active',x===btn));renderChart();}));
       $('daySlider').addEventListener('input',e=>{if(!state.ready)return;state.day=Number(e.target.value);updateHeat();});
       $('playButton').addEventListener('click',playPause);
@@ -770,12 +853,12 @@
       $('zoomIn').addEventListener('click',()=>zoomMap(1));$('zoomOut').addEventListener('click',()=>zoomMap(-1));
       $('resetMap').addEventListener('click',()=>{state.offlineZoom=1;$('offline-svg').style.transform='scale(1)';if(state.mapLoaded)fitStations();toast('已显示全部测站');});
       $('exportBtn').addEventListener('click',downloadCSV);
-      $('aboutBtn').addEventListener('click',()=>toast('预测值读取自 web_data/forecast_rsi.csv（RSI-H1 / RSI-H3，2026 年 9 月回测）；站点坐标为估计值，热力为沿河道插值示意。',5000));
+      $('aboutBtn').addEventListener('click',()=>toast('预测读取 web_data/forecast_rsi.csv；驱动因子读取 drivers_daily.csv；风险与建议提取自对应日期日报（reports_daily.json）。站点坐标为估计值，热力为插值示意。',6000));
       $('baseBtn').addEventListener('click',e=>{e.stopPropagation();toggleCal();});
       $('calGrid').addEventListener('click',e=>{const b=e.target.closest('button[data-date]');if(!b||b.disabled)return;toggleCal(false);if(b.dataset.date!==state.base){setBase(b.dataset.date);toast('基准日已切换为 '+dotted(b.dataset.date));}});
       document.addEventListener('click',e=>{if(!$('calPop').hidden&&!e.target.closest('#calPop,#baseBtn'))toggleCal(false);});
       document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('calPop').hidden){toggleCal(false);$('baseBtn').focus();}});
-      document.querySelectorAll('[data-alert]').forEach(btn=>btn.addEventListener('click',()=>{$(btn.dataset.alert).classList.toggle('is-open');btn.textContent=$(btn.dataset.alert).classList.contains('is-open')?'⌃':'⌄';}));
+      $('alertList').addEventListener('click',e=>{const btn=e.target.closest('[data-alert]');if(!btn)return;const el=$(btn.dataset.alert);el.classList.toggle('is-open');btn.textContent=el.classList.contains('is-open')?'⌃':'⌄';});
       document.querySelectorAll('.nav [data-scroll]').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b===btn));$(btn.dataset.scroll).scrollIntoView({behavior:'smooth',block:'start'});}));
       try{await loadData();state.ready=true;}catch(err){console.error(err);showLoadError(err);}
       if(state.ready){
@@ -786,7 +869,7 @@
         $('stationStrip').innerHTML=stationIds().map(id=>`<button type="button" data-id="${esc(id)}">${esc(STATIONS[id].name)}</button>`).join('');
         document.querySelectorAll('#stationStrip button').forEach(btn=>btn.addEventListener('click',()=>setStation(btn.dataset.id,{fly:true})));
         $('baseLabel').textContent=dotted(state.base);renderCalendar();
-        setStation(state.station,{silent:true});renderOfflineHeat();
+        setStation(state.station,{silent:true});renderOfflineHeat();renderAlerts();
       }
       setTimeout(initLeaflet,10);
       window.addEventListener('resize',()=>{if(state.ready)renderChart();if(state.mapLoaded)state.leaflet.invalidateSize();toggleCal(false);});

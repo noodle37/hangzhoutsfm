@@ -1,0 +1,664 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="theme-color" content="#f5f8fa" />
+<meta name="description" content="三江水域污染及蓝藻水华监测预警日报：水环境实时监测、巡查与遥感观测、水文气象预报、蓝藻水华预测与建议，附当日现场与遥感影像。" />
+<title>监测预警日报 | 蓝藻智测 · 梅城三江口</title>
+<!--
+  当日 Word 日报的阅读版，与平台首页 / 技术报告共用同一套色板与卡片语言。
+  文本 / 概率 / 风险等级 / 实测 / 图题：web_data/reports_daily.json
+  蓝藻预测浓度：web_data/forecast_rsi.csv（T+1 = RSI-H1，T+2/3 = RSI-H3）
+  附图影像：serve.ps1 的 /report_figs 与 /report_fig 端点按需从 日报\日报\*.docx 读取，不预加载。
+-->
+<style>
+  :root{
+    --bg:#f5f8fa; --surface:#ffffff; --surface-alt:#fbfcfe;
+    --text:#15243a; --muted:#71809a; --light:#9aa7b8;
+    --line:#e5ebf1;
+    --teal:#12a894; --teal-deep:#0b8f7c; --teal-soft:#e7f7f2;
+    --lake:#2e9be6; --lake-deep:#2478d4; --lake-soft:#eaf4fd;
+    --amber:#f0a63c; --amber-deep:#d98a25; --amber-soft:#fdf3e1;
+    --orange:#e07b39; --orange-deep:#c2611f; --orange-soft:#fdefe4;
+    --red:#e86558; --red-deep:#c2472e; --red-soft:#fbe0da;
+    --green:#14a576; --green-deep:#0d8a62; --green-soft:#e7f7f0;
+    --shadow:0 14px 45px rgba(38,61,101,.05), 0 2px 12px rgba(38,61,101,.024);
+    --radius:21px;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0; color:var(--text); background:var(--bg); font-size:14px; line-height:1.85;
+    font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro Text','Inter','PingFang SC','Microsoft YaHei',sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  ::selection{background:rgba(18,168,148,.2);}
+  a{color:var(--lake-deep);}
+  button,input,select{font:inherit;}
+  button{cursor:pointer;}
+  :focus-visible{outline:3px solid rgba(46,155,230,.25); outline-offset:3px; border-radius:8px;}
+  *{scrollbar-width:thin; scrollbar-color:#cfd9e2 transparent;}
+  ::-webkit-scrollbar{width:10px;height:10px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+  ::-webkit-scrollbar-thumb{background:#cfd9e2;border-radius:8px;border:2px solid var(--bg);}
+  ::-webkit-scrollbar-thumb:hover{background:var(--teal);}
+
+  /* ---------- 顶栏（与首页 / 技术报告一致） ---------- */
+  .topbar{height:76px;position:sticky;top:0;z-index:3000;border-bottom:1px solid rgba(219,226,235,.76);background:rgba(255,255,255,.88);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);}
+  .topbar-in{height:76px;width:min(1440px,calc(100% - 68px));margin:0 auto;display:flex;align-items:center;gap:16px;}
+  .brand{display:flex;align-items:center;gap:12px;text-decoration:none;color:var(--text);min-width:0;}
+  .brand-mark{width:38px;height:38px;display:grid;place-items:center;border-radius:12px;color:#fff;background:linear-gradient(140deg,#2fd0b4 0%,#12a894 42%,#2e9be6 100%);box-shadow:0 6px 18px rgba(24,158,171,.2);flex-shrink:0;}
+  .brand-mark svg{width:20px;height:20px;stroke:#fff;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;}
+  .brand-name{font-size:15px;font-weight:800;letter-spacing:.2px;white-space:nowrap;}
+  .brand-sub{font-size:10.5px;color:var(--muted);font-weight:650;letter-spacing:1.2px;margin-top:2px;}
+  .date-ctl{display:flex;align-items:center;gap:2px;margin-left:auto;padding:3px;border-radius:12px;background:#f4f6fa;border:1px solid #edf0f6;}
+  .date-ctl button{width:30px;height:30px;border:0;border-radius:9px;background:transparent;color:#8e9aab;font-size:15px;line-height:1;display:grid;place-items:center;transition:all .15s;}
+  .date-ctl button:hover:not(:disabled){background:#fff;color:var(--text);box-shadow:0 2px 8px rgba(38,61,101,.09);}
+  .date-ctl button:disabled{opacity:.35;cursor:default;}
+  .date-ctl input{border:0;background:transparent;color:var(--text);font-weight:750;font-size:12.5px;padding:4px 6px;border-radius:8px;font-variant-numeric:tabular-nums;}
+  .issue-chip{display:inline-flex;align-items:center;gap:7px;padding:7px 13px;font-size:11.5px;font-weight:700;border:1px solid rgba(84,158,186,.18);border-radius:50px;color:#47718a;background:rgba(255,255,255,.6);white-space:nowrap;}
+  .issue-chip .dot{width:6px;height:6px;border-radius:50%;background:var(--teal);}
+  .top-actions{display:flex;align-items:center;gap:8px;}
+  .btn-home{border:1px solid #d7e6ee;border-radius:50px;padding:10px 18px;font-size:12.5px;font-weight:750;color:#3d6a86;background:rgba(255,255,255,.75);display:inline-flex;align-items:center;gap:7px;text-decoration:none;transition:all .16s;white-space:nowrap;}
+  .btn-home:hover{border-color:#b9d8e8;background:#fff;}
+  .btn-home.solid{color:#fff;background:linear-gradient(120deg,#12a894,#2e9be6);border-color:transparent;box-shadow:0 6px 18px rgba(24,158,171,.24);}
+  .btn-home.solid:hover{filter:brightness(1.05);}
+  .btn-home svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;}
+  .progress{position:absolute;left:0;bottom:-1px;height:2px;width:0;background:linear-gradient(90deg,var(--teal),var(--lake));transition:width .1s linear;}
+
+  /* ---------- 布局 ---------- */
+  .wrap{width:min(1440px,calc(100% - 68px));margin:0 auto;padding:26px 0 60px;display:grid;grid-template-columns:212px minmax(0,1fr);gap:26px;align-items:start;}
+  .wrap > *{min-width:0;}
+  .toc{position:sticky;top:102px;}
+  .toc-card{max-width:100%;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px 14px;}
+  .toc-title{font-size:10.5px;letter-spacing:2.4px;font-weight:800;color:var(--light);margin:0 0 10px 8px;}
+  .toc a{display:flex;align-items:baseline;gap:9px;padding:8px 10px;border-radius:11px;color:#6c7c92;font-size:12.5px;font-weight:650;text-decoration:none;border-left:2px solid transparent;transition:all .15s;}
+  .toc a .no{font-size:11px;font-weight:800;color:var(--light);flex:none;width:14px;letter-spacing:1px;}
+  .toc a:hover{background:#f2f6f9;color:var(--text);}
+  .toc a.on{background:var(--teal-soft);color:var(--teal-deep);border-left-color:var(--teal);}
+  .toc a.on .no{color:var(--teal-deep);}
+  .toc-meta{margin-top:12px;padding:10px 10px 2px;border-top:1px solid #f1f4f7;font-size:10.5px;color:var(--light);line-height:1.8;}
+  .toc-meta b{color:var(--muted);font-weight:750;}
+
+  /* ---------- 文档卡片 ---------- */
+  .sheet{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);max-width:960px;margin:0 auto;padding:0 48px 40px;overflow:hidden;}
+  .masthead{position:relative;margin:0 -48px 34px;padding:44px 48px 32px;background:linear-gradient(103deg,#e4f7f0 0%,#edf6fd 44%,#f8fafc 72%,#e6f2fb 100%);border-bottom:1px solid #e3eef2;overflow:hidden;}
+  .masthead::before{content:"";width:640px;height:640px;position:absolute;top:-370px;right:6%;border-radius:50%;background:radial-gradient(circle,rgba(46,155,230,.14) 0,rgba(46,155,230,0) 68%);pointer-events:none;}
+  .eyebrow{display:inline-flex;align-items:center;gap:10px;font-size:11px;font-weight:800;letter-spacing:2.2px;color:var(--teal-deep);}
+  .eyebrow::before{content:"";width:18px;height:2px;border-radius:2px;background:var(--teal);}
+  .masthead h1{margin:14px 0 0;font-size:clamp(24px,3vw,34px);line-height:1.35;letter-spacing:-.5px;font-weight:800;max-width:720px;position:relative;}
+  .mast-meta{display:flex;flex-wrap:wrap;gap:9px;margin-top:20px;position:relative;}
+  .mast-meta > span{display:inline-flex;align-items:center;gap:7px;padding:8px 13px;font-size:11.5px;font-weight:650;border:1px solid rgba(84,158,186,.18);border-radius:50px;color:#47718a;background:rgba(255,255,255,.6);}
+  .mast-meta .dot{width:6px;height:6px;border-radius:50%;background:var(--teal);}
+  .mast-meta .issue{color:var(--lake-deep);background:var(--lake-soft);border-color:#cfe4f8;}
+  .mast-meta .issue .dot{background:var(--lake);}
+
+  section{margin-top:42px;scroll-margin-top:96px;}
+  section:first-of-type{margin-top:0;}
+  .sec-head{display:flex;align-items:center;gap:13px;margin:0 0 18px;}
+  .sec-no{flex:none;width:32px;height:32px;display:grid;place-items:center;font-size:14px;font-weight:800;color:#fff;background:linear-gradient(140deg,#2fd0b4 0%,#12a894 42%,#2e9be6 100%);border-radius:11px;box-shadow:0 5px 14px rgba(24,158,171,.22);}
+  .sec-head h2{font-size:20px;font-weight:800;letter-spacing:-.3px;margin:0;}
+  .sec-head .rule{flex:1;height:1px;background:linear-gradient(90deg,var(--line),transparent);}
+  p.body{margin:0 0 12px;text-align:justify;color:#2e4053;}
+  p.body:last-child{margin-bottom:0;}
+  .num{font-weight:750;color:var(--lake-deep);font-variant-numeric:tabular-nums;}
+  h4.sub{display:flex;align-items:center;gap:9px;font-size:14.5px;font-weight:800;margin:22px 0 10px;color:var(--text);}
+  h4.sub .dot{flex:none;width:8px;height:8px;border-radius:3px;background:linear-gradient(140deg,var(--teal),var(--lake));}
+  .figref{color:var(--lake-deep);font-weight:700;text-decoration:none;border-bottom:1px dashed rgba(46,155,230,.55);}
+  .figref:hover{color:var(--teal-deep);}
+
+  .river-card{border:1px solid var(--line);border-left:3px solid var(--lake);border-radius:14px;background:var(--surface-alt);padding:13px 18px;margin:0 0 10px;}
+  .river-card.r-lan{border-left-color:var(--amber);}
+  .river-card.r-fuchun{border-left-color:var(--teal);}
+  .river-tag{display:inline-block;font-size:10.5px;font-weight:800;letter-spacing:1px;color:var(--lake-deep);background:var(--lake-soft);border:1px solid #cfe4f8;border-radius:50px;padding:2px 11px;margin-bottom:7px;}
+  .river-card.r-lan .river-tag{color:var(--amber-deep);background:var(--amber-soft);border-color:#f3ddb4;}
+  .river-card.r-fuchun .river-tag{color:var(--teal-deep);background:var(--teal-soft);border-color:#cdebe2;}
+  .river-card p{margin:0;font-size:13px;text-align:justify;color:#2e4053;}
+
+  /* ---------- 表格 ---------- */
+  .tbl-cap{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:24px 0 10px;}
+  .tbl-cap .t{font-size:14.5px;font-weight:800;letter-spacing:-.1px;}
+  .tbl-cap .s{font-size:11.5px;color:var(--muted);font-weight:650;}
+  .tbl-tools{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 10px;}
+  .switch{display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none;font-size:12px;font-weight:700;color:var(--muted);}
+  .switch input{position:absolute;opacity:0;width:0;height:0;}
+  .switch .track{width:34px;height:19px;border-radius:50px;background:#dfe6ec;position:relative;transition:background .18s;flex:none;}
+  .switch .track::after{content:"";position:absolute;top:2.5px;left:3px;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(38,61,101,.25);transition:left .18s;}
+  .switch input:checked + .track{background:var(--teal);}
+  .switch input:checked + .track::after{left:17px;}
+  .switch input:focus-visible + .track{outline:3px solid rgba(46,155,230,.25);outline-offset:2px;}
+  .tbl-scroll{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:#fff;}
+  table{border-collapse:collapse;width:100%;font-size:12.5px;min-width:560px;}
+  thead th{background:#f4f8fb;color:#5d7386;font-weight:750;font-size:11.5px;letter-spacing:.4px;padding:10px 14px;border-bottom:1px solid #e4ebf2;text-align:left;white-space:nowrap;}
+  tbody td{padding:10px 14px;border-bottom:1px solid #eef2f6;vertical-align:middle;color:#4c6176;}
+  tbody tr:last-child td{border-bottom:0;}
+  tbody tr:hover td{background:#f8fbfd;}
+  tr.grp td{background:linear-gradient(90deg,var(--teal-soft),rgba(231,247,242,.25));font-weight:800;color:var(--teal-deep);font-size:12.5px;padding:8px 14px;border-bottom:1px solid #e4ebf2;}
+  tr.grp .hchip{font-weight:700;font-size:10px;color:#47718a;background:rgba(255,255,255,.85);border:1px solid rgba(84,158,186,.18);border-radius:50px;padding:1px 9px;margin-left:8px;}
+  td.st{font-weight:750;color:var(--text);white-space:nowrap;}
+  td.st small{display:block;font-weight:600;font-size:10px;color:var(--light);}
+  .conc{font-size:16px;font-weight:800;color:var(--lake-deep);font-variant-numeric:tabular-nums;letter-spacing:-.3px;}
+  .conc small{font-size:10px;font-weight:700;color:var(--light);margin-left:3px;letter-spacing:0;}
+  .conc-sub{display:block;font-size:10px;color:var(--light);font-variant-numeric:tabular-nums;margin-top:1px;}
+  .orig{color:var(--muted);font-variant-numeric:tabular-nums;}
+  .mchip{display:inline-block;font-size:9.5px;font-weight:780;letter-spacing:.4px;color:var(--lake-deep);background:var(--lake-soft);border:1px solid #cfe4f8;border-radius:50px;padding:1px 8px;margin-left:6px;vertical-align:2px;white-space:nowrap;}
+  .na{color:var(--light);font-size:11.5px;}
+  .prob{font-variant-numeric:tabular-nums;font-weight:700;color:#33465c;}
+  .lvl{display:inline-block;font-size:11px;font-weight:750;border-radius:50px;padding:2px 12px;white-space:nowrap;border:1px solid;}
+  .lvl-0{color:var(--green-deep);background:var(--green-soft);border-color:#bfe8d6;}
+  .lvl-1{color:var(--amber-deep);background:var(--amber-soft);border-color:#f3ddb4;}
+  .lvl-2{color:var(--orange-deep);background:var(--orange-soft);border-color:#f6d3b8;}
+  .lvl-3{color:var(--red-deep);background:var(--red-soft);border-color:#f3c0b6;}
+  .fav{display:inline-block;font-size:11px;font-weight:750;border-radius:50px;padding:1px 11px;border:1px solid;white-space:nowrap;}
+  .fav-b2{color:var(--red-deep);background:var(--red-soft);border-color:#f3c0b6;}
+  .fav-b1{color:var(--orange-deep);background:var(--orange-soft);border-color:#f6d3b8;}
+  .fav-n{color:#6c7c92;background:#f2f5f8;border-color:#e2e8ee;}
+  .fav-g1{color:var(--teal-deep);background:var(--teal-soft);border-color:#cdebe2;}
+  .fav-g2{color:var(--green-deep);background:var(--green-soft);border-color:#bfe8d6;}
+  .delta-up{color:var(--orange-deep);font-weight:750;}
+  .delta-dn{color:var(--green-deep);font-weight:750;}
+
+  .notes{margin:12px 0 0;padding:14px 18px;background:var(--surface-alt);border:1px solid var(--line);border-radius:14px;font-size:11.5px;color:var(--muted);}
+  .notes .lead{margin:0 0 9px;color:#5d7386;font-weight:650;}
+  .legend{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;}
+  .legend .li{border:1px solid var(--line);border-radius:12px;background:#fff;padding:8px 12px;font-size:10.5px;line-height:1.65;color:var(--muted);}
+  .legend .li b{display:block;font-size:11.5px;margin-bottom:1px;color:var(--text);}
+  .legend .li i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;}
+
+  .advice{border:1px solid #f3ddb4;border-left:3px solid var(--amber);background:var(--amber-soft);border-radius:14px;padding:16px 20px;}
+  .advice.none{border-color:var(--line);border-left-color:#cfd9e2;background:var(--surface-alt);}
+  .advice .ah{display:flex;align-items:center;gap:9px;font-weight:800;font-size:13px;color:var(--amber-deep);margin-bottom:8px;}
+  .advice.none .ah{color:var(--muted);}
+  .advice .ah svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;}
+  .advice p{margin:0;font-size:13px;text-align:justify;color:#2e4053;}
+
+  /* ---------- 附图 ---------- */
+  .fig-group{margin:0 0 24px;scroll-margin-top:100px;}
+  .fig-cap{display:flex;align-items:baseline;gap:10px;font-size:12.5px;font-weight:750;color:var(--text);margin-bottom:9px;}
+  .fig-cap .fn{flex:none;font-size:10px;font-weight:800;letter-spacing:.6px;color:var(--teal-deep);background:var(--teal-soft);border:1px solid #cdebe2;border-radius:50px;padding:2px 10px;}
+  .fig-row{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));}
+  .fig-plate{position:relative;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#f2f6f9;cursor:zoom-in;padding:0;display:block;width:100%;transition:box-shadow .2s,transform .2s;}
+  .fig-plate:hover{box-shadow:0 10px 30px rgba(38,61,101,.12);transform:translateY(-2px);}
+  .fig-plate img{display:block;width:100%;height:300px;object-fit:contain;}
+  .fig-plate .zoom{position:absolute;right:9px;bottom:9px;width:26px;height:26px;border-radius:8px;background:rgba(255,255,255,.9);border:1px solid var(--line);color:#3d6a86;display:grid;place-items:center;font-size:13px;opacity:0;transition:opacity .2s;}
+  .fig-plate:hover .zoom{opacity:1;}
+  .fig-plate .ph{position:absolute;inset:0;display:grid;place-items:center;color:var(--light);font-size:10.5px;letter-spacing:2px;font-weight:700;}
+  .fig-plate.err .ph{color:var(--red-deep);}
+  .fig-note{font-size:11.5px;color:var(--muted);margin:0 0 16px;}
+
+  /* ---------- 来源 / 页脚 ---------- */
+  .prov{border:1px solid var(--line);border-radius:14px;overflow:hidden;}
+  .prov .row{display:grid;grid-template-columns:132px 1fr;gap:14px;padding:11px 18px;border-bottom:1px solid #eef2f6;font-size:12px;}
+  .prov .row:last-child{border-bottom:0;}
+  .prov .row:nth-child(odd){background:var(--surface-alt);}
+  .prov .k{font-weight:800;color:var(--teal-deep);}
+  .prov .v{color:var(--muted);}
+  .links{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px;}
+  .sheet-foot{margin-top:38px;padding-top:16px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:10.5px;color:var(--light);font-weight:650;}
+
+  /* ---------- 灯箱 ---------- */
+  .lightbox{position:fixed;inset:0;z-index:4000;background:rgba(21,36,58,.82);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);display:none;align-items:center;justify-content:center;flex-direction:column;padding:30px;}
+  .lightbox.open{display:flex;}
+  .lightbox img{max-width:min(1200px,94vw);max-height:78vh;object-fit:contain;border-radius:12px;box-shadow:0 30px 90px rgba(10,25,45,.5);background:#fff;}
+  .lb-cap{color:#eaf2f8;font-size:13px;font-weight:700;margin-top:14px;text-align:center;max-width:900px;}
+  .lb-count{color:#a9bcd0;font-size:11px;margin-top:4px;letter-spacing:1px;font-weight:650;}
+  .lb-btn{position:absolute;width:42px;height:42px;border-radius:50%;border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.12);color:#fff;font-size:18px;display:grid;place-items:center;transition:background .15s;}
+  .lb-btn:hover{background:rgba(255,255,255,.26);}
+  .lb-close{top:20px;right:22px;}
+  .lb-prev{left:22px;top:50%;transform:translateY(-50%);}
+  .lb-next{right:22px;top:50%;transform:translateY(-50%);}
+
+  /* ---------- 状态 ---------- */
+  .state-card{max-width:640px;margin:60px auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:34px 38px;text-align:center;box-shadow:var(--shadow);}
+  .state-card h2{margin:0 0 10px;font-size:20px;font-weight:800;color:var(--red-deep);}
+  .state-card p{color:var(--muted);font-size:13px;margin:0 0 6px;}
+  .skel{max-width:960px;margin:0 auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:52px 48px;box-shadow:var(--shadow);}
+  .skel .bar{height:14px;border-radius:7px;background:linear-gradient(90deg,#eef2f6 25%,#f8fafc 50%,#eef2f6 75%);background-size:200% 100%;animation:sh 1.3s infinite;margin-bottom:14px;}
+  @keyframes sh{to{background-position:-200% 0;}}
+  .reveal{opacity:0;transform:translateY(14px);transition:opacity .5s ease,transform .5s ease;}
+  .reveal.in{opacity:1;transform:none;}
+  .flash{animation:flash 1.2s ease;}
+  @keyframes flash{0%{box-shadow:0 0 0 3px rgba(46,155,230,.4);}100%{box-shadow:0 0 0 0 rgba(46,155,230,0);}}
+
+  @media (max-width:1080px){
+    .topbar-in,.wrap{width:calc(100% - 40px);}
+    .wrap{grid-template-columns:1fr;padding-top:16px;gap:16px;}
+    .toc{position:sticky;top:86px;z-index:40;}
+    .toc-card{display:flex;align-items:center;gap:4px;overflow-x:auto;padding:8px 10px;border-radius:14px;}
+    .toc-title,.toc-meta{display:none;}
+    .toc a{white-space:nowrap;border-left:0;border-bottom:2px solid transparent;padding:6px 10px;}
+    .toc a.on{border-bottom-color:var(--teal);}
+    .sheet{padding:0 30px 30px;}
+    .masthead{margin:0 -30px 26px;padding:34px 30px 26px;}
+    .skel{padding:38px 30px;}
+  }
+  @media (max-width:640px){
+    .topbar{height:64px;}
+    .topbar-in{height:64px;width:calc(100% - 24px);gap:8px;}
+    .brand-sub{display:none;}
+    .brand-name{font-size:13px;}
+    .brand-mark{width:32px;height:32px;border-radius:10px;}
+    .issue-chip{display:none;}
+    .btn-home{padding:8px 12px;font-size:11.5px;}
+    .btn-home span{display:none;}
+    .toc{top:74px;}
+    .wrap{width:calc(100% - 20px);padding-top:12px;gap:12px;}
+    .sheet{padding:0 16px 24px;border-radius:16px;}
+    .masthead{margin:0 -16px 22px;padding:26px 16px 22px;}
+    .skel{padding:28px 16px;}
+    section{margin-top:32px;}
+    .fig-plate img{height:220px;}
+    .prov .row{grid-template-columns:1fr;gap:2px;}
+    .lb-prev{left:8px;} .lb-next{right:8px;}
+  }
+  @media (prefers-reduced-motion:reduce){
+    html{scroll-behavior:auto;}
+    .reveal{opacity:1;transform:none;transition:none;}
+    *{animation-duration:.01ms !important;}
+  }
+  @media print{
+    body{background:#fff;}
+    .topbar,.toc,.tbl-tools,.lightbox,.links,.progress{display:none !important;}
+    .wrap{display:block;width:auto;padding:0;}
+    .sheet{box-shadow:none;border:0;max-width:none;padding:0;border-radius:0;}
+    .masthead{margin:0 0 20px;padding:20px 0;background:none;border-bottom:1px solid #ccc;}
+    section{margin-top:22px;}
+    .tbl-scroll{overflow:visible;border:1px solid #bbb;}
+    table{min-width:0;font-size:10.5px;}
+    tr.grp,thead{break-inside:avoid;}
+    .fig-plate img{height:200px;opacity:1;}
+    .reveal{opacity:1;transform:none;}
+    a{color:inherit;text-decoration:none;}
+  }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-in">
+    <a class="brand" href="../">
+      <span class="brand-mark"><svg viewBox="0 0 24 24"><path d="M12 3c3.5 4.2 6 7.4 6 10.4A6 6 0 0 1 6 13.4C6 10.4 8.5 7.2 12 3z"/><path d="M9.5 13.5a2.5 2.5 0 0 0 2.5 2.5"/></svg></span>
+      <span><span class="brand-name">监测预警日报</span><span class="brand-sub" style="display:block;">SANJIANG BULLETIN</span></span>
+    </a>
+    <div class="date-ctl">
+      <button id="prevDay" type="button" title="前一天（←）" aria-label="前一天">‹</button>
+      <input id="dateInput" type="date" min="2026-09-01" max="2026-09-30" value="2026-09-22" aria-label="日报日期" />
+      <button id="nextDay" type="button" title="后一天（→）" aria-label="后一天">›</button>
+    </div>
+    <span class="issue-chip" id="issueChip"><span class="dot"></span>第 — 期</span>
+    <div class="top-actions">
+      <a class="btn-home solid" id="backLink" href="../" title="返回预测平台（同基准日）"><svg viewBox="0 0 24 24"><path d="M19 12H5"/><path d="M11 18l-6-6 6-6"/></svg><span>返回平台</span></a>
+      <button class="btn-home" id="printBtn" type="button" title="打印 / 另存为 PDF"><svg viewBox="0 0 24 24"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v7H6z"/></svg><span>打印</span></button>
+    </div>
+  </div>
+  <div class="progress" id="progress"></div>
+</header>
+
+<div class="wrap">
+  <nav class="toc" aria-label="日报目录">
+    <div class="toc-card" id="tocCard">
+      <p class="toc-title">目 录</p>
+      <a href="#sec-1" data-sec="sec-1"><span class="no">一</span>水环境实时监测</a>
+      <a href="#sec-2" data-sec="sec-2"><span class="no">二</span>巡查与遥感观测</a>
+      <a href="#sec-3" data-sec="sec-3"><span class="no">三</span>水文气象与预报</a>
+      <a href="#sec-4" data-sec="sec-4"><span class="no">四</span>蓝藻水华预测</a>
+      <a href="#sec-5" data-sec="sec-5"><span class="no">五</span>建议</a>
+      <a href="#sec-fig" data-sec="sec-fig"><span class="no">图</span>附图影像</a>
+      <a href="#sec-src" data-sec="sec-src"><span class="no">源</span>数据来源</a>
+      <div class="toc-meta" id="tocMeta"></div>
+    </div>
+  </nav>
+  <main id="main">
+    <div class="skel" id="skel" aria-hidden="true">
+      <div class="bar" style="width:62%;height:26px;margin-bottom:22px;"></div>
+      <div class="bar" style="width:40%;margin-bottom:30px;"></div>
+      <div class="bar" style="width:100%;"></div><div class="bar" style="width:96%;"></div><div class="bar" style="width:88%;"></div>
+      <div class="bar" style="width:100%;height:90px;margin-top:24px;"></div>
+      <div class="bar" style="width:92%;"></div><div class="bar" style="width:70%;"></div>
+    </div>
+  </main>
+</div>
+
+<div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="附图查看">
+  <button class="lb-btn lb-close" id="lbClose" type="button" aria-label="关闭">✕</button>
+  <button class="lb-btn lb-prev" id="lbPrev" type="button" aria-label="上一张">‹</button>
+  <img id="lbImg" alt="" />
+  <button class="lb-btn lb-next" id="lbNext" type="button" aria-label="下一张">›</button>
+  <div class="lb-cap" id="lbCap"></div>
+  <div class="lb-count" id="lbCount"></div>
+</div>
+
+<script>
+'use strict';
+const DATA = '../web_data/';
+const DMIN = '2026-09-01', DMAX = '2026-09-30', DDEF = '2026-09-22';
+const ORDER = ['yanziling','yanlingwu','meichengmatou','jiangjunyan'];
+const RISK_RANK = {'低风险':0,'中风险':1,'较高风险':2,'高风险':3};
+const FAV_CLASS = {'非常有利':'fav-b2','较有利':'fav-b1','一般':'fav-n','较不利':'fav-g1','非常不利':'fav-g2'};
+const FAV_DOT = {'非常有利':'#e86558','较有利':'#e07b39','一般':'#9aa7b8','较不利':'#12a894','非常不利':'#14a576'};
+const LVL_DOT = ['#14a576','#f0a63c','#e07b39','#e86558'];
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num = s => (s==null||s==='') ? null : (Number.isFinite(+s) ? +s : null);
+const fmt = (v,d) => v==null ? '—' : Number(v).toFixed(d==null?2:d);
+const addDays = (iso,n) => { const d=new Date(iso+'T00:00:00Z'); d.setUTCDate(d.getUTCDate()+n); return d.toISOString().slice(0,10); };
+const cnDate = iso => `${+iso.slice(5,7)}月${+iso.slice(8,10)}日`;
+const modelFor = h => h===1 ? 'RSI-H1' : 'RSI-H3';
+
+let REPORTS = {}, FC = {}, ST = {}, DATES = [];
+let cur = DDEF, figs = null, figList = [], lbIndex = 0, showOrig = false;
+
+function parseCSV(text){
+  text = text.replace(/^\ufeff/,'');
+  const rows=[]; let row=[], f='', q=false;
+  for(let i=0;i<text.length;i++){ const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){f+='"';i++;} else q=false; } else f+=c; }
+    else if(c==='"') q=true;
+    else if(c===','){ row.push(f); f=''; }
+    else if(c==='\n'||c==='\r'){ if(c==='\r'&&text[i+1]==='\n')i++; row.push(f); f=''; if(row.length>1||row[0]!=='')rows.push(row); row=[]; }
+    else f+=c;
+  }
+  if(f!==''||row.length){ row.push(f); rows.push(row); }
+  const head=(rows.shift()||[]).map(s=>s.trim());
+  return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||'').trim()])));
+}
+async function loadCSV(name){ const r=await fetch(DATA+name,{cache:'no-store'}); if(!r.ok) throw new Error(name+' HTTP '+r.status); return parseCSV(await r.text()); }
+const rsi = (sid,origin,h) => FC[[sid,origin,h,modelFor(h)].join('|')] || null;
+
+function inline(s){
+  let t = esc(s);
+  t = t.replace(/(\d+(?:\.\d+)?(?:\s*[-~–]\s*\d+(?:\.\d+)?)?)\s*(mg\/L|μg\/L|万cells\/L|℃|m3\/s|m\b)/g, '<span class="num">$1</span> $2');
+  t = t.replace(/附图\s*(\d+)(?:\s*[-~–]\s*(\d+))?/g, (m,a,b)=> b ? `附图<a class="figref" href="#fig-${a}">${a}</a>-<a class="figref" href="#fig-${b}">${b}</a>` : `附图<a class="figref" href="#fig-${a}">${a}</a>`);
+  return t;
+}
+const lvlChip = l => l===null||l===undefined||l==='' ? '<span class="na">—</span>' : `<span class="lvl lvl-${RISK_RANK[l]==null?0:RISK_RANK[l]}">${esc(l)}</span>`;
+const favChip = f => `<span class="fav ${FAV_CLASS[f]||'fav-n'}">${esc(f||'—')}</span>`;
+
+function concCell(sid, origin, h){
+  const f = rsi(sid, origin, h);
+  if(!f) return `<span class="na">无 RSI 预测</span><span class="conc-sub">T+${h} · ${modelFor(h)} 缺测</span>`;
+  const iv = (f.q10!=null && f.q90!=null) ? `<span class="conc-sub">区间 ${fmt(f.q10)} – ${fmt(f.q90)}</span>` : '';
+  return `<span class="conc">${fmt(f.point)}<small>μg/L</small></span><span class="mchip">T+${h} · ${modelFor(h)}</span>${iv}`;
+}
+
+/* ---------------- 各章节 ---------------- */
+function secOne(lines){
+  let html = '';
+  lines.forEach(l=>{
+    const m = /^\((\d)\)\s*([^：:]+)[：:]\s*(.*)$/.exec(l);
+    if(m){
+      const river = m[2].trim();
+      const cls = river.includes('兰江') ? ' r-lan' : river.includes('富春江') ? ' r-fuchun' : '';
+      html += `<div class="river-card${cls}"><span class="river-tag">${esc(river)}</span><p>${inline(m[3])}</p></div>`;
+    } else html += `<p class="body">${inline(l)}</p>`;
+  });
+  return html;
+}
+function secTwo(lines){
+  return lines.map(l=> /^\d+、/.test(l)
+    ? `<h4 class="sub"><span class="dot"></span>${esc(l)}</h4>`
+    : `<p class="body">${inline(l)}</p>`).join('');
+}
+function secThree(rep, lines){
+  const i1 = lines.findIndex(l=>/^表1/.test(l));
+  const paras = (i1<0?lines:lines.slice(0,i1)).map(l=>`<p class="body">${inline(l)}</p>`).join('');
+  const cap = i1<0 ? '表1  未来三天三江流域天气预报' : lines[i1];
+  const inote = lines.findIndex(l=>/^\*/.test(l));
+  const notes = inote<0 ? [] : lines.slice(inote);
+  const wrows = (rep.weather||[]).map(w=>`<tr>
+      <td class="st">${cnDate(w.date)}</td><td>${esc(w.cond)}</td><td>${esc(w.wind)}</td>
+      <td class="prob">${fmt(w.tmin,0)}℃</td><td class="prob">${fmt(w.tmax,0)}℃</td><td>${favChip(w.favorable)}</td></tr>`).join('');
+  const defs = notes.filter(l=>/^(非常有利|较有利|一般|较不利|非常不利)[：:]/.test(l)).map(l=>{
+    const k = l.split(/[：:]/)[0];
+    return `<div class="li"><b><i style="background:${FAV_DOT[k]||'#9aa7b8'}"></i>${esc(k)}</b>${esc(l.slice(k.length+1))}</div>`;
+  }).join('');
+  const lead = notes.find(l=>/^\*/.test(l)) || '';
+  return `${paras}
+    <div class="tbl-cap"><span class="t">${esc(cap)}</span></div>
+    <div class="tbl-scroll"><table><thead><tr><th>日期</th><th>天气</th><th>风向风力</th><th>最低气温</th><th>最高气温</th><th>水华形成</th></tr></thead><tbody>${wrows||'<tr><td colspan="6" class="na">当日日报无表 1 数据</td></tr>'}</tbody></table></div>
+    ${lead?`<div class="notes"><p class="lead">${esc(lead.replace(/^\*/,''))}</p>${defs?`<div class="legend">${defs}</div>`:''}</div>`:''}`;
+}
+function secFour(rep, lines){
+  const cap2 = lines.find(l=>/^表2/.test(l)) || '表2  未来三天三江关键水域蓝藻水华预报';
+  const sub2 = lines[lines.findIndex(l=>/^表2/.test(l))+1] || '蓝藻浓度预测及水华风险预报';
+  const cap3 = lines.find(l=>/^表3/.test(l)) || '表3  预测与实测蓝藻浓度对比（单位：μg/L）';
+  const iN = lines.findIndex(l=>/^\*依据/.test(l));
+  const i3 = lines.findIndex(l=>/^表3/.test(l));
+  const riskNotes = iN<0 ? [] : lines.slice(iN, i3<0?lines.length:i3);
+  const defs = riskNotes.filter(l=>/^(低风险|中风险|较高风险|高风险)[：:]/.test(l)).map(l=>{
+    const k = l.split(/[：:]/)[0]; const r = RISK_RANK[k]==null?0:RISK_RANK[k];
+    return `<div class="li"><b style="color:${LVL_DOT[r]}"><i style="background:${LVL_DOT[r]}"></i>${esc(k)}</b>${esc(l.slice(k.length+1))}</div>`;
+  }).join('');
+
+  const dates = [...new Set((rep.risk||[]).map(r=>r.date))];
+  let rows2 = '';
+  dates.forEach(d=>{
+    const h = Math.round((Date.parse(d+'T00:00:00Z')-Date.parse(cur+'T00:00:00Z'))/864e5);
+    rows2 += `<tr class="grp"><td colspan="${showOrig?6:5}">${cnDate(d)}<span class="hchip">T+${h} · 起点 ${cur.slice(5).replace('-','/')}</span></td></tr>`;
+    ORDER.forEach(sid=>{
+      const r = (rep.risk||[]).find(x=>x.date===d && x.station===sid);
+      if(!r) return;
+      rows2 += `<tr><td class="st">${esc(ST[sid]?ST[sid].name:sid)}<small>${esc(ST[sid]?ST[sid].river:'')}</small></td>
+        <td>${concCell(sid, cur, h)}</td>
+        ${showOrig?`<td class="orig">${r.conc==null?'—':fmt(r.conc)}</td>`:''}
+        <td class="prob">${r.prob==null?'—':fmt(r.prob,1)+'%'}</td>
+        <td>${lvlChip(r.level)}</td></tr>`;
+    });
+  });
+  if(!rows2) rows2 = `<tr><td colspan="5" class="na">当日日报无表 2 数据</td></tr>`;
+
+  const cdates = [...new Set((rep.compare||[]).map(r=>r.date))];
+  let rows3 = '';
+  cdates.forEach(d=>{
+    rows3 += `<tr class="grp"><td colspan="${showOrig?6:5}">${cnDate(d)}<span class="hchip">RSI 起点 ${addDays(d,-1).slice(5).replace('-','/')} · T+1</span></td></tr>`;
+    ORDER.forEach(sid=>{
+      const r = (rep.compare||[]).find(x=>x.date===d && x.station===sid);
+      if(!r) return;
+      const f = rsi(sid, addDays(d,-1), 1);
+      const mm = /^([\d.]+)\s*[-~–]\s*([\d.]+)$/.exec(String(r.observed||''));
+      let sub = '';
+      if(f && mm){ const mid=(+mm[1]+ +mm[2])/2, dv=f.point-mid;
+        sub = `<span class="conc-sub">区间中值 ${fmt(mid)} · 偏差 <span class="${dv>=0?'delta-up':'delta-dn'}">${dv>=0?'+':''}${fmt(dv)}</span></span>`; }
+      rows3 += `<tr><td class="st">${esc(ST[sid]?ST[sid].name:sid)}</td>
+        <td class="prob">${esc(r.observed||'—')}</td>
+        <td>${f?`<span class="conc">${fmt(f.point)}<small>μg/L</small></span><span class="mchip">RSI-H1</span>${sub}`:'<span class="na">无 RSI 预测</span>'}</td>
+        ${showOrig?`<td class="orig">${r.report_pred==null?'—':fmt(r.report_pred)}</td>`:''}
+        <td style="color:var(--muted);font-size:11.5px;">${esc(r.note||'')}</td></tr>`;
+    });
+  });
+  if(!rows3) rows3 = `<tr><td colspan="5" class="na">当日日报无表 3 数据</td></tr>`;
+
+  return `
+    <div class="tbl-cap"><span class="t">${esc(cap2)}</span><span class="s">${esc(sub2)}</span></div>
+    <div class="tbl-tools">
+      <label class="switch"><input type="checkbox" id="origToggle" ${showOrig?'checked':''}><span class="track"></span>对照日报原值</label>
+    </div>
+    <div class="tbl-scroll"><table><thead><tr><th>预测水域</th><th>RSI 预测浓度（μg/L）</th>${showOrig?'<th>日报原值</th>':''}<th>水华暴发概率</th><th>风险等级</th></tr></thead><tbody>${rows2}</tbody></table></div>
+    ${riskNotes.length?`<div class="notes"><p class="lead">${esc((riskNotes[0]||'').replace(/^\*/,''))}</p>${defs?`<div class="legend">${defs}</div>`:''}</div>`:''}
+    <div class="tbl-cap"><span class="t">${esc(cap3)}</span><span class="s">预测列：RSI-H1（T+1）</span></div>
+    <div class="tbl-scroll"><table><thead><tr><th>实测站点名称</th><th>实测浓度</th><th>RSI 预测浓度（μg/L）</th>${showOrig?'<th>日报原预测</th>':''}<th>备注</th></tr></thead><tbody>${rows3}</tbody></table></div>`;
+}
+function secFive(rep){
+  const a = (rep.advice||'').trim();
+  if(!a || a==='无。' || a==='无'){
+    return `<div class="advice none"><div class="ah"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9 12h6"/></svg>当日建议</div><p>无。</p></div>`;
+  }
+  return `<div class="advice"><div class="ah"><svg viewBox="0 0 24 24"><path d="M12 3l9 16H3z"/><path d="M12 10v4"/><path d="M12 17.2v.1"/></svg>处置与监测建议</div><p>${inline(a)}</p></div>`;
+}
+function secFigs(){
+  if(!figs || !figs.images || !figs.images.length){
+    const caps = (figs && figs.captions) || [];
+    return `<p class="fig-note">附图影像暂不可用。</p>` +
+      (caps.length ? caps.map((c,i)=>`<div class="fig-group" id="fig-${i+1}"><div class="fig-cap"><span class="fn">图 ${i+1}</span>${esc(c)}</div></div>`).join('') : '');
+  }
+  figList = figs.images;
+  const groups = [];
+  figs.images.forEach(im=>{
+    const key = im.caption || ('影像 '+(im.i+1));
+    let g = groups.find(x=>x.key===key);
+    if(!g){ g={key, items:[]}; groups.push(g); }
+    g.items.push(im);
+  });
+  let html = `<p class="fig-note">点击影像可放大查看。</p>`;
+  let no = 0;
+  groups.forEach(g=>{
+    no++;
+    const cap = g.key.replace(/^附图\s*/,'').replace(/[：:]$/,'');
+    html += `<div class="fig-group" id="fig-${no}"><div class="fig-cap"><span class="fn">图 ${no}</span>${esc(cap)}</div><div class="fig-row">` +
+      g.items.map(im=>{
+        const idx = figList.indexOf(im);
+        return `<button class="fig-plate" type="button" data-fig="${idx}" aria-label="放大查看 ${esc(g.key)}"><span class="ph">LOADING</span><img loading="lazy" decoding="async" src="${esc(im.url)}" alt="${esc(g.key)}" onload="this.classList.add('ok');this.previousElementSibling.style.display='none'" onerror="this.closest('.fig-plate').classList.add('err');this.previousElementSibling.textContent='影像读取失败'"><span class="zoom">⤢</span></button>`;
+      }).join('') + `</div></div>`;
+  });
+  return html;
+}
+function secSrc(rep){
+  return `
+    <div class="prov">
+      <div class="row"><span class="k">日报原文</span><span class="v">三江水域污染及蓝藻水华监测预警日报 · 2026 年 ${+cur.slice(5,7)} 月 ${+cur.slice(8,10)} 日（第 ${esc(rep.issue||'—')} 期）</span></div>
+      <div class="row"><span class="k">蓝藻浓度预测</span><span class="v">RSI 模型 · 未来 1 天（RSI-H1）与未来 3 天（RSI-H3）</span></div>
+      <div class="row"><span class="k">监测与气象</span><span class="v">水质自动监测站实测数据；流域天气预报取自日报表 1</span></div>
+    </div>
+    <div class="links">
+      <a class="btn-home" href="../?base=${cur}"><svg viewBox="0 0 24 24"><path d="M3 12l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>预测平台 · 基准日 ${cur.slice(5).replace('-','/')}</a>
+      <a class="btn-home" href="../RSI算法技术报告_h1h3.html"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7"/><path d="M9 16h7"/></svg>RSI 算法技术报告</a>
+      <a class="btn-home" href="../蓝藻算法对比_benchmark.html"><svg viewBox="0 0 24 24"><path d="M4 20V9"/><path d="M10 20V4"/><path d="M16 20v-8"/><path d="M22 20H2"/></svg>算法对比</a>
+    </div>`;
+}
+
+function render(){
+  const rep = REPORTS[cur];
+  const S = rep.sections || {};
+  const L = k => (S[k] && S[k].lines) || [];
+  const title = k => (S[k] && S[k].title) || '';
+  const sec = (id,no,name,body)=>`<section id="${id}" class="reveal"><div class="sec-head"><span class="sec-no">${no}</span><h2>${esc(name.replace(/^[一二三四五]、/,''))}</h2><span class="rule"></span></div>${body}</section>`;
+  $('main').innerHTML = `<article class="sheet">
+    <div class="masthead">
+      <span class="eyebrow">浙江省 · 建德梅城三江口</span>
+      <h1>三江水域污染及蓝藻水华<br>监测预警日报</h1>
+      <div class="mast-meta"><span><span class="dot"></span>2026 年 ${+cur.slice(5,7)} 月 ${+cur.slice(8,10)} 日</span><span class="issue"><span class="dot"></span>第 ${esc(rep.issue||'—')} 期</span><span>新安江 / 兰江 / 富春江</span></div>
+    </div>
+    ${sec('sec-1','一',title('一')||'一、三江水环境实时监测结果',secOne(L('一')))}
+    ${sec('sec-2','二',title('二')||'二、蓝藻现状巡查及遥感观测',secTwo(L('二')))}
+    ${sec('sec-3','三',title('三')||'三、水文气象条件现状及预测',secThree(rep,L('三')))}
+    ${sec('sec-4','四',title('四')||'四、蓝藻水华预测结果',secFour(rep,L('四')))}
+    ${sec('sec-5','五',title('五')||'五、建议',secFive(rep))}
+    ${sec('sec-fig','图','附图（现场巡查 / 卫星遥感 / 多光谱）',secFigs())}
+    ${sec('sec-src','源','数据来源',secSrc(rep))}
+    <div class="sheet-foot"><span>三江水域污染及蓝藻水华监测预警日报 · 第 ${esc(rep.issue||'—')} 期</span><span>蓝藻浓度预测：RSI 模型</span></div>
+  </article>`;
+  $('issueChip').innerHTML = '<span class="dot"></span>第 ' + esc(rep.issue||'—') + ' 期';
+  $('dateInput').value = cur;
+  $('backLink').href = '../?base=' + cur;
+  $('tocMeta').innerHTML = `<b>${cur}</b><br>第 ${esc(rep.issue||'—')} 期 · 共 ${DATES.length} 期`;
+  const idx = DATES.indexOf(cur);
+  $('prevDay').disabled = idx<=0;
+  $('nextDay').disabled = idx<0 || idx>=DATES.length-1;
+  const tg = $('origToggle');
+  if(tg) tg.addEventListener('change', ()=>{ showOrig = tg.checked; const y=window.scrollY; render(); window.scrollTo(0,y); });
+  bindSheet();
+  history.replaceState(null,'','?date='+cur);
+}
+
+function updateSpy(){
+  const y = window.scrollY + 150;
+  let act = 'sec-1';
+  document.querySelectorAll('section[id]').forEach(s=>{
+    if(s.getBoundingClientRect().top + window.scrollY <= y) act = s.id;
+  });
+  document.querySelectorAll('.toc a').forEach(a=>a.classList.toggle('on', a.dataset.sec===act));
+}
+function bindSheet(){
+  document.querySelectorAll('.fig-plate').forEach(b=>b.addEventListener('click',()=>openLb(+b.dataset.fig)));
+  document.querySelectorAll('.figref').forEach(a=>a.addEventListener('click',e=>{
+    const el = document.getElementById(a.getAttribute('href').slice(1));
+    if(el){ e.preventDefault(); el.scrollIntoView({behavior:'smooth',block:'center'}); el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
+  }));
+  const io = new IntersectionObserver(es=>es.forEach(en=>{ if(en.isIntersecting){ en.target.classList.add('in'); io.unobserve(en.target); } }),{threshold:.06});
+  document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+  requestAnimationFrame(updateSpy);
+}
+
+/* ---------------- 灯箱 ---------------- */
+function openLb(i){
+  if(!figList.length) return;
+  lbIndex = (i+figList.length)%figList.length;
+  const im = figList[lbIndex];
+  $('lbImg').src = im.url;
+  $('lbImg').alt = im.caption || '附图';
+  $('lbCap').textContent = im.caption || ('影像 '+(im.i+1));
+  $('lbCount').textContent = (lbIndex+1)+' / '+figList.length;
+  $('lightbox').classList.add('open');
+  document.body.style.overflow='hidden';
+}
+function closeLb(){ $('lightbox').classList.remove('open'); document.body.style.overflow=''; }
+$('lbClose').addEventListener('click',closeLb);
+$('lbPrev').addEventListener('click',()=>openLb(lbIndex-1));
+$('lbNext').addEventListener('click',()=>openLb(lbIndex+1));
+$('lightbox').addEventListener('click',e=>{ if(e.target===$('lightbox')) closeLb(); });
+
+/* ---------------- 日期切换 ---------------- */
+async function loadFigs(){
+  figs = null; figList = [];
+  try{
+    const r = await fetch('../report_figs?date='+cur,{cache:'no-store'});
+    if(r.ok) figs = await r.json();
+  }catch(e){ /* 无影像端点时降级为图题列表 */ }
+}
+async function setDate(iso){
+  if(!REPORTS[iso]) return;
+  cur = iso;
+  await loadFigs();
+  render();
+  window.scrollTo({top:0,behavior:'auto'});
+}
+$('prevDay').addEventListener('click',()=>{ const i=DATES.indexOf(cur); if(i>0) setDate(DATES[i-1]); });
+$('nextDay').addEventListener('click',()=>{ const i=DATES.indexOf(cur); if(i>=0&&i<DATES.length-1) setDate(DATES[i+1]); });
+$('dateInput').addEventListener('change',()=>setDate($('dateInput').value));
+$('printBtn').addEventListener('click',()=>window.print());
+document.addEventListener('keydown',e=>{
+  if($('lightbox').classList.contains('open')){
+    if(e.key==='Escape') closeLb();
+    else if(e.key==='ArrowLeft') openLb(lbIndex-1);
+    else if(e.key==='ArrowRight') openLb(lbIndex+1);
+    return;
+  }
+  if(/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
+  if(e.key==='ArrowLeft') $('prevDay').click();
+  else if(e.key==='ArrowRight') $('nextDay').click();
+});
+window.addEventListener('scroll',()=>{
+  const h = document.documentElement;
+  const p = h.scrollTop / Math.max(1,(h.scrollHeight-h.clientHeight));
+  $('progress').style.width = (p*100).toFixed(2)+'%';
+  updateSpy();
+},{passive:true});
+window.addEventListener('beforeprint',()=>{ document.querySelectorAll('.fig-plate img').forEach(i=>{ i.loading='eager'; }); });
+
+/* ---------------- 启动 ---------------- */
+(async function init(){
+  try{
+    const [st, fc] = await Promise.all([loadCSV('stations.csv'), loadCSV('forecast_rsi.csv')]);
+    st.forEach(r=>{ ST[r.station_id]={name:r.name,river:r.river}; });
+    fc.forEach(r=>{ const p=num(r.point); if(p==null)return;
+      FC[[r.station_id,r.origin_date,r.horizon,r.model].join('|')]={point:p,q10:num(r.q10),q90:num(r.q90)}; });
+    const r = await fetch(DATA+'reports_daily.json',{cache:'no-store'});
+    if(!r.ok) throw new Error('reports_daily.json HTTP '+r.status);
+    REPORTS = await r.json();
+    DATES = Object.keys(REPORTS).sort();
+    if(!DATES.length) throw new Error('reports_daily.json 为空');
+    const q = /[?&]date=(\d{4}-\d{2}-\d{2})/.exec(location.search);
+    cur = (q && REPORTS[q[1]]) ? q[1] : (REPORTS[DDEF] ? DDEF : DATES[0]);
+    $('dateInput').min = DATES[0]; $('dateInput').max = DATES[DATES.length-1];
+    await loadFigs();
+    $('skel').remove();
+    render();
+  }catch(err){
+    console.error(err);
+    $('main').innerHTML = `<div class="state-card"><h2>未能读取日报数据</h2><p>${esc(err.message||err)}</p><p>请运行 serve.ps1 后访问 http://localhost:8000/pages/daily_report.html</p></div>`;
+    const s=$('skel'); if(s) s.remove();
+  }
+})();
+</script>
+</body>
+</html>

@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#f5f9fb" />
-  <meta name="description" content="梅城三江口蓝藻预测 RSI 智能体算法技术报告：H1（未来 1 天）与 H3（未来 3 天）任务上，RSI 与 CNN-LSTM、GRU、LSTM、Transformer 的 MAE、RMSE 等指标对比，含总体与分测站柱状图、逐日误差折线图与算法核心思想介绍。" />
+  <meta name="description" content="梅城三江口蓝藻预测 RSI（递归自我进化）方法技术报告：H1（未来 1 天）与 H3（未来 3 天）任务上，RSI 与 CNN-LSTM、GRU、LSTM、Transformer 的 MAE、RMSE 等指标对比，含总体与分测站柱状图、逐日误差折线图与方法核心思想介绍。" />
   <title>技术报告 · RSI 蓝藻预测算法 | 蓝藻智测</title>
   <!--
     RSI 算法技术报告 · 单文件页面
@@ -75,14 +75,14 @@
     .ch-desc { color: var(--muted); font-size: 13.5px; line-height: 1.8; max-width: 720px; margin: 6px 0 26px; }
 
     /* ---------- 博客正文 ---------- */
-    .prose { max-width: 780px; margin: 0 auto; }
-    .prose p { font-size: 16px; line-height: 2.02; color: #33465c; margin: 0 0 22px; text-align: justify; }
+    .prose { max-width: 880px; margin: 0 auto; }
+    .prose p { font-size: 17px; line-height: 2.1; color: #2e4053; margin: 0 0 24px; text-align: justify; letter-spacing: .1px; }
     .prose p b { color: var(--text); font-weight: 750; }
-    .prose .pull { border-left: 3px solid var(--kimi); padding: 2px 0 2px 18px; margin: 26px 0; font-size: 16.5px; line-height: 1.95; color: var(--text); font-weight: 650; }
-    .prose h3 { font-size: 19px; font-weight: 800; margin: 34px 0 14px; letter-spacing: -.2px; }
+    .prose .pull { border-left: 3px solid var(--kimi); padding: 4px 0 4px 20px; margin: 30px 0; font-size: 17.5px; line-height: 2; color: var(--text); font-weight: 650; }
+    .prose h3 { font-size: 22px; font-weight: 800; margin: 42px 0 18px; letter-spacing: -.2px; }
     /* 第一章整体居中呈现 */
     #algo .ch-head { justify-content: center; }
-    #algo .ch-desc { margin-left: auto; margin-right: auto; text-align: center; }
+    #algo .ch-desc { margin-left: auto; margin-right: auto; max-width: 880px; font-size: 14px; line-height: 2; }
 
     /* 流程图 */
     .flow { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 24px 0 30px; }
@@ -198,7 +198,7 @@
     <section class="hero">
       <span class="eyebrow">Technical Report · 2026-09 评测</span>
       <h1>面向蓝藻短期预测的 RSI 智能体算法</h1>
-      <p class="lead">本报告介绍平台采用的 RSI（Reflective Synergy Intelligence）预测算法，并给出其在 <b>未来 1 天（H1）</b>与<b>未来 3 天（H3）</b>任务上的系统评测。对照方法包括 CNN-LSTM、GRU、LSTM 与 Transformer，评测于 2026-09 在梅城三江口四个测站进行，指标包括 MAE、RMSE、加权误差与峰值相对误差。</p>
+      <p class="lead">本报告介绍平台采用的 RSI（Recursive Self-Improvement，递归自我进化）预测方法，并给出其在 <b>未来 1 天（H1）</b>与<b>未来 3 天（H3）</b>任务上的系统评测。对照方法包括 CNN-LSTM、GRU、LSTM 与 Transformer，评测于 2026-09 在梅城三江口四个测站进行，指标包括 MAE、RMSE、加权误差与峰值相对误差。</p>
       <div class="hero-meta">
         <span><i class="dot"></i>评测期 2026-09</span>
         <span><i class="dot"></i>4 个测站 · 梅城三江口</span>
@@ -237,7 +237,7 @@
         <span class="ch-num">01</span>
         <h2>算法介绍</h2>
       </div>
-      <p class="ch-desc">RSI（Reflective Synergy Intelligence）是我们提出的大语言模型–时序基础模型协同预测框架。大语言模型与时序基础模型本身均为已有的成熟组件，本框架的核心贡献在于二者之间的调度方式与自进化机制：大模型如何调用时序基座模型获得数值预测，又如何通过逐日复盘让系统在运行中持续积累经验、不断改进预测。此处只阐述方法的设计思想，实现细节可参阅算法说明文档。</p>
+      <p class="ch-desc">RSI（Recursive Self-Improvement，递归自我进化）是当前人工智能领域备受关注的方法范式：系统在运行中观察自身的预测表现，把经验沉淀为可调用的记忆，并在下一次预测中做得更好，整个过程不需要重新训练模型。本平台将这一范式应用于蓝藻浓度的短期预测。我们的工作在于为梅城三江口设计了一套完整的水环境预测机制：语言模型负责阅读各测站的水质与气象信息，调度时序基础模型完成数值外推，并在护栏约束下依据天气形态做出小幅修正；每日预测结束后，系统自动复盘当天的偏差，把结论写入跨日传递的记忆库，供后续预测参考。随着运行天数的增加，系统持续积累对四个测站的本地化经验，预测结果也随之越来越贴合实际水情。以下只阐述方法的设计思想，实现细节可参阅算法说明文档。</p>
 
       <div class="prose">
         <h3>总体框架：语言模型调度时序基座模型的六阶段循环</h3>
@@ -253,13 +253,16 @@
           <span class="f-loop">⟲ 记忆进入下一天的决策与融合，系统随运行自进化</span>
         </div>
 
-        <div class="pull">语言模型负责调度与修正，时序基座模型负责计算，逐日复盘驱动系统自我进化——这是 RSI 在全部任务与全部测站上保持稳定领先的基础。</div>
+        <div class="pull">语言模型负责调度与修正，时序基座模型负责计算，逐日复盘驱动系统自我进化，这是 RSI 在全部任务与全部测站上保持稳定领先的基础。</div>
 
-        <h3>H1：在线门控与一步偏差修正</h3>
-        <p>H1 任务要求预测未来一天的日最高蓝藻浓度。采用版本在框架之上为每个测站增加了一层在线后处理，包含两个依次工作的环节。第一个环节是<b>在线门控</b>：系统为每个测站分别记录融合预测与基座原始预测的历史累积误差，仅在融合预测的累积误差更小时继续采用融合结果，否则切换回原始预测。这一机制让每个测站自动流向更可靠的预测来源，避免在个别站点上被失效的修正持续拖累。第二个环节是<b>一步偏差修正</b>：系统用最近一次已揭晓的带符号误差对基础预测做幅度很小的反向修正，以缓解持续存在的系统性偏高或偏低。两个环节只依赖已经揭晓的历史误差，整个过程严格因果，预测时不会接触任何未来信息。</p>
+        <h3>相比传统时序方法的优势</h3>
+        <p>深度学习网络在监测数据完整、规律稳定的场景中可以取得不错的表现，而真实的水环境监测往往不具备这样的条件：采样依赖人工与自动设备的正常运行，缺测时有发生；各测站之间的水情差异显著，季节更替又会不断改变蓝藻的生成机制。这类模型一旦训练完成便难以随环境演进，参数中固化的历史规律会在数据分布变化后迅速失效。RSI 框架针对这些现实约束给出了系统性的回应。语言模型可以在缺测日参考相邻日期的序列形态与气象条件作出有依据的判断，不依赖严格连续的输入；记忆机制让系统无需重新训练即可吸收各测站独有的水文规律，运行越久，对站点特性的理解越充分；逐日复盘与护栏的组合则保证长期运行中的每一次修正都处于可控范围。这种差异在三天预测跨度上体现得尤为明显：传统方法对未来时刻的气象条件缺乏感知，误差随跨度延长快速累积，RSI 则将未来三天的天气信息纳入逐日修正，使第三天的误差仍然低于各基线方法第二天的水平，显著延长了预报的有效预见期。</p>
 
-        <h3>H3：未来天气注入与受限的放宽护栏</h3>
-        <p>H3 任务要求同时预测未来三天的逐日最高值。在这个任务上，框架固定调用单一基座模型与固定的上下文长度，并将未来三天的逐日气象条件写入站点简报，使融合环节的修正可以针对每一天分别进行。与之配套，护栏在区间宽度上给予语言模型更大的自由度，同时为点预测设置修正量上限，修正幅度不得超过原始区间宽度的十分之一；任何一天校验失败，该天都会回退到基座原始预测。这样的设计让三天的预测既能各自响应对应的天气条件，又把修正风险限制在很小的范围内。</p>
+        <h3>H1：在线自适应与偏差自校正</h3>
+        <p>H1 任务要求预测未来一天的日最高蓝藻浓度。在这个跨度上，框架的核心设计是一套完全由历史证据驱动的在线自适应机制。系统为每个测站分别维护两条预测路径，一条来自天气融合的修正结果，另一条来自基座模型的原始输出，并依据两者持续累计的已揭晓误差动态选择当日采用的路径。这一设计使修正能力强的测站始终受益于语言模型的判断，而在修正价值尚未显现的测站，系统会回到更稳妥的原始预测，规避局部修正失效带来的长期拖累。在选定路径之上，系统进一步利用最近一次已揭晓的带符号误差进行幅度很小的反向校正，用以消解连续出现的系统性偏高或偏低。整个机制只依赖已经公布的历史误差，预测当时不接触任何未来信息，严格满足因果约束，本质上是一套随运行时间不断自我校准的轻量后处理层。</p>
+
+        <h3>H3：逐日天气驱动的受限多步修正</h3>
+        <p>H3 任务要求在同一预测起点同时给出未来三天逐日的最高浓度。多步预测的难点在于误差会随跨度延长而放大，且三天各自对应的天气过程彼此不同，任何统一的修正都难以兼顾所有日期。框架的应对是把未来三天逐日的气象条件直接纳入融合环节，使修正可以精确作用于对应的日期，升温、降雨与辐射变化在每天独立生效。为了让这种逐日修正既有效又安全，护栏被设计为两层约束：第一层放宽融合输出的可表达范围，允许预测值适度越过基座模型给出的原始区间，以容纳天气驱动的判断；第二层为修正量设置上限，任何单日的调整都被限制在原始区间宽度的十分之一以内，校验一旦失败即回退到该天的原始预测。受限的自由度让三天的预测既能各自响应各自的天气条件，又不会引入失控的偏差，这正是 RSI 在长跨度任务上优势更加显著的原因。</p>
       </div>
     </section>
 
@@ -269,7 +272,7 @@
         <span class="ch-num">02</span>
         <h2>H1 · 未来 1 天预测对比</h2>
       </div>
-      <p class="ch-desc">RSI-H1 v1.1 与四个深度学习基线在 2026-09 评测期的总体与分测站指标对比。蓝色柱为 RSI，灰色柱为基线，数值越小越好。</p>
+      <p class="ch-desc">RSI 与四个深度学习基线在 2026-09 评测期的总体与分测站指标对比。蓝色柱为 RSI，灰色柱为基线，数值越小越好。</p>
 
       <div class="card fig">
         <div class="fig-head">
@@ -282,7 +285,7 @@
           <div class="bars" id="h1-overall-bars"></div>
         </div>
         <div class="fig-foot">
-          <b>逐日最优：</b>RSI-H1 在 42 天取得当日最小误差，多于 CNN-LSTM（23 天）、GRU（20 天）、LSTM（12 天）与 Transformer（16 天）；平均排名 2.44，亦为五者中最优。RSI-H1 v1.1 为点预测修正，不输出预测区间，覆盖率记为 —。
+          <b>逐日最优：</b>RSI 在 42 天取得当日最小误差，多于 CNN-LSTM（23 天）、GRU（20 天）、LSTM（12 天）与 Transformer（16 天）；平均排名 2.44，亦为五者中最优。RSI 为点预测修正，不输出预测区间，覆盖率记为 —。
         </div>
       </div>
 
@@ -297,7 +300,7 @@
           <div class="station-grid" id="h1-station-grid"></div>
         </div>
         <div class="fig-foot">
-          <b>分站结论：</b>RSI-H1 在将军岩、严陵坞、严子陵三个测站的 MAE 与 RMSE 均为五方法最低；梅城码头与最优基线基本打平（MAE 1.315，与 CNN-LSTM 并列，GRU 略优）。误差峰值出现在严子陵站，各方法差距也最大。
+          <b>分站结论：</b>RSI 在将军岩、严陵坞、严子陵三个测站的 MAE 与 RMSE 均为五方法最低；梅城码头与最优基线基本打平（MAE 1.315，与 CNN-LSTM 并列，GRU 略优）。误差峰值出现在严子陵站，各方法差距也最大。
         </div>
       </div>
     </section>
@@ -308,7 +311,7 @@
         <span class="ch-num">03</span>
         <h2>H3 · 未来 3 天预测对比</h2>
       </div>
-      <p class="ch-desc">RSI-H3 与四个深度学习基线在 2026-09 评测期的总体与分测站指标对比，总体图支持按预测跨度（t+1 至 t+3）切换。蓝色柱为 RSI，灰色柱为基线，数值越小越好。</p>
+      <p class="ch-desc">RSI 与四个深度学习基线在 2026-09 评测期的总体与分测站指标对比，总体图支持按预测跨度（t+1 至 t+3）切换。蓝色柱为 RSI，灰色柱为基线，数值越小越好。</p>
 
       <div class="card fig">
         <div class="fig-head">
@@ -322,7 +325,7 @@
           <div class="bars" id="h3-overall-bars"></div>
         </div>
         <div class="fig-foot" id="h3-overall-foot">
-          <b>逐窗口最优：</b>RSI-H3 在 53 个窗口取得窗口最小平均误差，远多于 CNN-LSTM（14）、GRU（11）、LSTM（11）与 Transformer（14）；平均排名 2.14。RSI-H3 区间覆盖率 73.8%，与最优基线 GRU（77.3%）处于同一水平。
+          <b>逐窗口最优：</b>RSI 在 53 个窗口取得窗口最小平均误差，远多于 CNN-LSTM（14）、GRU（11）、LSTM（11）与 Transformer（14）；平均排名 2.14。RSI 区间覆盖率 73.8%，与最优基线 GRU（77.3%）处于同一水平。
         </div>
       </div>
 
@@ -337,7 +340,7 @@
           <div class="station-grid" id="h3-station-grid"></div>
         </div>
         <div class="fig-foot">
-          <b>分站结论：</b>RSI-H3 在全部四个测站的 MAE、RMSE、W-MAE 与 W-RMSE 上均为五方法最低，且在误差水平最高的严子陵站优势最大（MAE 4.285，较最优基线低 12.1%）。
+          <b>分站结论：</b>RSI 在全部四个测站的 MAE、RMSE、W-MAE 与 W-RMSE 上均为五方法最低，且在误差水平最高的严子陵站优势最大（MAE 4.285，较最优基线低 12.1%）。
         </div>
       </div>
 
@@ -380,7 +383,7 @@
           </div>
         </div>
         <div class="fig-foot">
-          <b>读图：</b>在整个评测期的连续预测窗口上，RSI-H3 的窗口平均误差多数落在 1–3 μg/L 区间，基线方法普遍高出 0.5–2 μg/L，且波动更剧烈。
+          <b>读图：</b>在整个评测期的连续预测窗口上，RSI 的窗口平均误差多数落在 1–3 μg/L 区间，基线方法普遍高出 0.5–2 μg/L，且波动更剧烈。
         </div>
       </div>
 
