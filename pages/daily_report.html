@@ -8,8 +8,8 @@
 <title>监测预警日报 | 蓝藻智测 · 梅城三江口</title>
 <!--
   当日 Word 日报的阅读版，与平台首页 / 技术报告共用同一套色板与卡片语言。
-  文本 / 概率 / 风险等级 / 实测 / 图题：web_data/reports_daily.json
-  蓝藻预测浓度：web_data/forecast_rsi.csv（T+1 = RSI-H1，T+2/3 = RSI-H3）
+  日报预报浓度 / 概率 / 风险等级 / 实测 / 备注 / 图题：web_data/reports_daily.json（解析自 日报\日报\*.docx，docx 中为「——」的格记为 null，页面显示「缺失」）
+  RSI 预测浓度：web_data/forecast_rsi.csv（T+1 = RSI-H1，T+2/3 = RSI-H3），与日报预报值并列展示
   附图影像：serve.ps1 的 /report_figs 与 /report_fig 端点按需从 日报\日报\*.docx 读取，不预加载。
 -->
 <style>
@@ -120,14 +120,6 @@
   .tbl-cap{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:24px 0 10px;}
   .tbl-cap .t{font-size:14.5px;font-weight:800;letter-spacing:-.1px;}
   .tbl-cap .s{font-size:11.5px;color:var(--muted);font-weight:650;}
-  .tbl-tools{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 10px;}
-  .switch{display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none;font-size:12px;font-weight:700;color:var(--muted);}
-  .switch input{position:absolute;opacity:0;width:0;height:0;}
-  .switch .track{width:34px;height:19px;border-radius:50px;background:#dfe6ec;position:relative;transition:background .18s;flex:none;}
-  .switch .track::after{content:"";position:absolute;top:2.5px;left:3px;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(38,61,101,.25);transition:left .18s;}
-  .switch input:checked + .track{background:var(--teal);}
-  .switch input:checked + .track::after{left:17px;}
-  .switch input:focus-visible + .track{outline:3px solid rgba(46,155,230,.25);outline-offset:2px;}
   .tbl-scroll{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:#fff;}
   table{border-collapse:collapse;width:100%;font-size:12.5px;min-width:560px;}
   thead th{background:#f4f8fb;color:#5d7386;font-weight:750;font-size:11.5px;letter-spacing:.4px;padding:10px 14px;border-bottom:1px solid #e4ebf2;text-align:left;white-space:nowrap;}
@@ -140,8 +132,9 @@
   td.st small{display:block;font-weight:600;font-size:10px;color:var(--light);}
   .conc{font-size:16px;font-weight:800;color:var(--lake-deep);font-variant-numeric:tabular-nums;letter-spacing:-.3px;}
   .conc small{font-size:10px;font-weight:700;color:var(--light);margin-left:3px;letter-spacing:0;}
+  .conc-alt{font-size:16px;font-weight:800;color:var(--teal-deep);font-variant-numeric:tabular-nums;letter-spacing:-.3px;}
+  .conc-alt small{font-size:10px;font-weight:700;color:var(--light);margin-left:3px;letter-spacing:0;}
   .conc-sub{display:block;font-size:10px;color:var(--light);font-variant-numeric:tabular-nums;margin-top:1px;}
-  .orig{color:var(--muted);font-variant-numeric:tabular-nums;}
   .mchip{display:inline-block;font-size:9.5px;font-weight:780;letter-spacing:.4px;color:var(--lake-deep);background:var(--lake-soft);border:1px solid #cfe4f8;border-radius:50px;padding:1px 8px;margin-left:6px;vertical-align:2px;white-space:nowrap;}
   .na{color:var(--light);font-size:11.5px;}
   .prob{font-variant-numeric:tabular-nums;font-weight:700;color:#33465c;}
@@ -259,7 +252,7 @@
   }
   @media print{
     body{background:#fff;}
-    .topbar,.toc,.tbl-tools,.lightbox,.links,.progress{display:none !important;}
+    .topbar,.toc,.lightbox,.links,.progress{display:none !important;}
     .wrap{display:block;width:auto;padding:0;}
     .sheet{box-shadow:none;border:0;max-width:none;padding:0;border-radius:0;}
     .masthead{margin:0 0 20px;padding:20px 0;background:none;border-bottom:1px solid #ccc;}
@@ -346,7 +339,7 @@ const cnDate = iso => `${+iso.slice(5,7)}月${+iso.slice(8,10)}日`;
 const modelFor = h => h===1 ? 'RSI-H1' : 'RSI-H3';
 
 let REPORTS = {}, FC = {}, ST = {}, DATES = [];
-let cur = DDEF, figs = null, figList = [], lbIndex = 0, showOrig = false;
+let cur = DDEF, figs = null, figList = [], lbIndex = 0;
 
 function parseCSV(text){
   text = text.replace(/^\ufeff/,'');
@@ -371,15 +364,18 @@ function inline(s){
   t = t.replace(/附图\s*(\d+)(?:\s*[-~–]\s*(\d+))?/g, (m,a,b)=> b ? `附图<a class="figref" href="#fig-${a}">${a}</a>-<a class="figref" href="#fig-${b}">${b}</a>` : `附图<a class="figref" href="#fig-${a}">${a}</a>`);
   return t;
 }
-const lvlChip = l => l===null||l===undefined||l==='' ? '<span class="na">—</span>' : `<span class="lvl lvl-${RISK_RANK[l]==null?0:RISK_RANK[l]}">${esc(l)}</span>`;
+const MISS = '<span class="na">缺失</span>';
+const lvlChip = l => l===null||l===undefined||l==='' ? MISS : `<span class="lvl lvl-${RISK_RANK[l]==null?0:RISK_RANK[l]}">${esc(l)}</span>`;
 const favChip = f => `<span class="fav ${FAV_CLASS[f]||'fav-n'}">${esc(f||'—')}</span>`;
 
-function concCell(sid, origin, h){
+function concCell(sid, origin, h, extra){
   const f = rsi(sid, origin, h);
-  if(!f) return `<span class="na">无 RSI 预测</span><span class="conc-sub">T+${h} · ${modelFor(h)} 缺测</span>`;
+  if(!f) return `${MISS}<span class="conc-sub">T+${h} · ${modelFor(h)} 无预测</span>`;
   const iv = (f.q10!=null && f.q90!=null) ? `<span class="conc-sub">区间 ${fmt(f.q10)} – ${fmt(f.q90)}</span>` : '';
-  return `<span class="conc">${fmt(f.point)}<small>μg/L</small></span><span class="mchip">T+${h} · ${modelFor(h)}</span>${iv}`;
+  return `<span class="conc-alt">${fmt(f.point)}<small>μg/L</small></span><span class="mchip">T+${h} · ${modelFor(h)}</span>${extra||''}${iv}`;
 }
+/* 日报原文预报值：v 为 null 表示 docx 中该格为「——」 */
+const docConcCell = v => v==null ? `${MISS}<span class="conc-sub">日报未给出</span>` : `<span class="conc">${fmt(v)}<small>μg/L</small></span>`;
 
 /* ---------------- 各章节 ---------------- */
 function secOne(lines){
@@ -434,35 +430,35 @@ function secFour(rep, lines){
   let rows2 = '';
   dates.forEach(d=>{
     const h = Math.round((Date.parse(d+'T00:00:00Z')-Date.parse(cur+'T00:00:00Z'))/864e5);
-    rows2 += `<tr class="grp"><td colspan="${showOrig?6:5}">${cnDate(d)}<span class="hchip">T+${h} · 起点 ${cur.slice(5).replace('-','/')}</span></td></tr>`;
+    rows2 += `<tr class="grp"><td colspan="6">${cnDate(d)}<span class="hchip">T+${h} · 起点 ${cur.slice(5).replace('-','/')}</span></td></tr>`;
     ORDER.forEach(sid=>{
       const r = (rep.risk||[]).find(x=>x.date===d && x.station===sid);
       if(!r) return;
       rows2 += `<tr><td class="st">${esc(ST[sid]?ST[sid].name:sid)}<small>${esc(ST[sid]?ST[sid].river:'')}</small></td>
+        <td>${docConcCell(r.conc)}</td>
         <td>${concCell(sid, cur, h)}</td>
-        ${showOrig?`<td class="orig">${r.conc==null?'—':fmt(r.conc)}</td>`:''}
-        <td class="prob">${r.prob==null?'—':fmt(r.prob,1)+'%'}</td>
+        <td class="prob">${r.prob==null?MISS:fmt(r.prob,1)+'%'}</td>
         <td>${lvlChip(r.level)}</td></tr>`;
     });
   });
-  if(!rows2) rows2 = `<tr><td colspan="5" class="na">当日日报无表 2 数据</td></tr>`;
+  if(!rows2) rows2 = `<tr><td colspan="6" class="na">当日日报无表 2 数据</td></tr>`;
 
   const cdates = [...new Set((rep.compare||[]).map(r=>r.date))];
   let rows3 = '';
   cdates.forEach(d=>{
-    rows3 += `<tr class="grp"><td colspan="${showOrig?6:5}">${cnDate(d)}<span class="hchip">RSI 起点 ${addDays(d,-1).slice(5).replace('-','/')} · T+1</span></td></tr>`;
+    rows3 += `<tr class="grp"><td colspan="5">${cnDate(d)}<span class="hchip">起点 ${addDays(d,-1).slice(5).replace('-','/')} · T+1</span></td></tr>`;
     ORDER.forEach(sid=>{
       const r = (rep.compare||[]).find(x=>x.date===d && x.station===sid);
       if(!r) return;
       const f = rsi(sid, addDays(d,-1), 1);
+      const obsTxt = (r.observed==null || r.observed==='' || r.observed==='——') ? MISS : esc(r.observed);
       const mm = /^([\d.]+)\s*[-~–]\s*([\d.]+)$/.exec(String(r.observed||''));
-      let sub = '';
-      if(f && mm){ const mid=(+mm[1]+ +mm[2])/2, dv=f.point-mid;
-        sub = `<span class="conc-sub">区间中值 ${fmt(mid)} · 偏差 <span class="${dv>=0?'delta-up':'delta-dn'}">${dv>=0?'+':''}${fmt(dv)}</span></span>`; }
+      const mid = mm ? (+mm[1]+ +mm[2])/2 : null;
+      const dev = v => (v==null||mid==null) ? '' : `<span class="conc-sub">较实测中值 ${fmt(mid)} · 偏差 <span class="${v-mid>=0?'delta-up':'delta-dn'}">${v-mid>=0?'+':''}${fmt(v-mid)}</span></span>`;
       rows3 += `<tr><td class="st">${esc(ST[sid]?ST[sid].name:sid)}</td>
-        <td class="prob">${esc(r.observed||'—')}</td>
-        <td>${f?`<span class="conc">${fmt(f.point)}<small>μg/L</small></span><span class="mchip">RSI-H1</span>${sub}`:'<span class="na">无 RSI 预测</span>'}</td>
-        ${showOrig?`<td class="orig">${r.report_pred==null?'—':fmt(r.report_pred)}</td>`:''}
+        <td class="prob">${obsTxt}</td>
+        <td>${docConcCell(r.report_pred)}${dev(r.report_pred)}</td>
+        <td>${concCell(sid, addDays(d,-1), 1, dev(f?f.point:null))}</td>
         <td style="color:var(--muted);font-size:11.5px;">${esc(r.note||'')}</td></tr>`;
     });
   });
@@ -470,13 +466,10 @@ function secFour(rep, lines){
 
   return `
     <div class="tbl-cap"><span class="t">${esc(cap2)}</span><span class="s">${esc(sub2)}</span></div>
-    <div class="tbl-tools">
-      <label class="switch"><input type="checkbox" id="origToggle" ${showOrig?'checked':''}><span class="track"></span>对照日报原值</label>
-    </div>
-    <div class="tbl-scroll"><table><thead><tr><th>预测水域</th><th>RSI 预测浓度（μg/L）</th>${showOrig?'<th>日报原值</th>':''}<th>水华暴发概率</th><th>风险等级</th></tr></thead><tbody>${rows2}</tbody></table></div>
+    <div class="tbl-scroll"><table><thead><tr><th>预测水域</th><th>日报预报浓度（μg/L）</th><th>RSI 预测浓度（μg/L）</th><th>水华暴发概率</th><th>风险等级</th></tr></thead><tbody>${rows2}</tbody></table></div>
     ${riskNotes.length?`<div class="notes"><p class="lead">${esc((riskNotes[0]||'').replace(/^\*/,''))}</p>${defs?`<div class="legend">${defs}</div>`:''}</div>`:''}
-    <div class="tbl-cap"><span class="t">${esc(cap3)}</span><span class="s">预测列：RSI-H1（T+1）</span></div>
-    <div class="tbl-scroll"><table><thead><tr><th>实测站点名称</th><th>实测浓度</th><th>RSI 预测浓度（μg/L）</th>${showOrig?'<th>日报原预测</th>':''}<th>备注</th></tr></thead><tbody>${rows3}</tbody></table></div>`;
+    <div class="tbl-cap"><span class="t">${esc(cap3)}</span><span class="s">预报值列：日报原文（实线基准）与 RSI-H1 模型（T+1）并列</span></div>
+    <div class="tbl-scroll"><table><thead><tr><th>实测站点名称</th><th>实测浓度</th><th>日报预报浓度（μg/L）</th><th>RSI 预测浓度（μg/L）</th><th>备注</th></tr></thead><tbody>${rows3}</tbody></table></div>`;
 }
 function secFive(rep){
   const a = (rep.advice||'').trim();
@@ -516,7 +509,7 @@ function secSrc(rep){
   return `
     <div class="prov">
       <div class="row"><span class="k">日报原文</span><span class="v">三江水域污染及蓝藻水华监测预警日报 · 2026 年 ${+cur.slice(5,7)} 月 ${+cur.slice(8,10)} 日（第 ${esc(rep.issue||'—')} 期）</span></div>
-      <div class="row"><span class="k">蓝藻浓度预测</span><span class="v">RSI 模型 · 未来 1 天（RSI-H1）与未来 3 天（RSI-H3）</span></div>
+      <div class="row"><span class="k">蓝藻浓度预测</span><span class="v">日报原文预报值（表 2 / 表 3）· 并列 RSI 模型（RSI-H1 / RSI-H3）</span></div>
       <div class="row"><span class="k">监测与气象</span><span class="v">水质自动监测站实测数据；流域天气预报取自日报表 1</span></div>
     </div>
     <div class="links">
@@ -545,7 +538,7 @@ function render(){
     ${sec('sec-5','五',title('五')||'五、建议',secFive(rep))}
     ${sec('sec-fig','图','附图（现场巡查 / 卫星遥感 / 多光谱）',secFigs())}
     ${sec('sec-src','源','数据来源',secSrc(rep))}
-    <div class="sheet-foot"><span>三江水域污染及蓝藻水华监测预警日报 · 第 ${esc(rep.issue||'—')} 期</span><span>蓝藻浓度预测：RSI 模型</span></div>
+    <div class="sheet-foot"><span>三江水域污染及蓝藻水华监测预警日报 · 第 ${esc(rep.issue||'—')} 期</span><span>蓝藻浓度预测：日报原文 · RSI 模型</span></div>
   </article>`;
   $('issueChip').innerHTML = '<span class="dot"></span>第 ' + esc(rep.issue||'—') + ' 期';
   $('dateInput').value = cur;
@@ -554,8 +547,6 @@ function render(){
   const idx = DATES.indexOf(cur);
   $('prevDay').disabled = idx<=0;
   $('nextDay').disabled = idx<0 || idx>=DATES.length-1;
-  const tg = $('origToggle');
-  if(tg) tg.addEventListener('change', ()=>{ showOrig = tg.checked; const y=window.scrollY; render(); window.scrollTo(0,y); });
   bindSheet();
   history.replaceState(null,'','?date='+cur);
 }
