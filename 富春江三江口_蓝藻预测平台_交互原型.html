@@ -409,7 +409,7 @@
           <div class="forecast-top"><span class="name" id="metricLabel">蓝藻浓度预测（日最大值）</span><span class="unit" id="metricUnit">μg/L</span></div>
           <div class="legend-inline"><span><i class="line-key"></i> 历史实测</span><span><i class="line-key future"></i> RSI 预测</span><span><i class="line-key daily"></i> 日报预测</span><span><i class="band-key"></i> q10–q90 区间（H3）</span><span><i class="act-key"></i> 同期实测</span></div>
           <div class="chart-wrap" id="chartWrap"><svg id="forecast-chart" role="img" aria-label="蓝藻浓度历史实测、RSI 预测、日报预测与预测区间图表" viewBox="0 0 600 270" preserveAspectRatio="none"></svg><div class="chart-tooltip" id="chartTooltip"></div></div>
-          <div class="chart-note"><span>预测起点：<strong id="baseNote">—</strong>　|　蓝色虚线为 RSI 预测，淡紫虚线为日报预测</span><span>点击或悬停查看数值</span></div>
+          <div class="chart-note"><span>预测起点：<strong id="baseNote">—</strong>　|　两条预测线均自基准日实测点起算：蓝色虚线为 RSI 预测，淡紫虚线为日报预测</span><span>点击或悬停查看数值</span></div>
         </div>
         <div class="forecast-insights" aria-label="预测摘要">
           <div class="insight"><div class="s-title">预测窗口内峰值</div><div class="s-value" id="peakVal">—</div><div class="s-foot" id="peakDate">—</div></div>
@@ -500,17 +500,17 @@
     const modelFor = h => h===1 ? 'RSI-H1' : 'RSI-H3';
     function forecast(id,h){return FC[[id,state.base,h,modelFor(h)].join('|')]||null;}
     const obsAt = (id,d) => OBS[id]&&OBS[id][d]!=null ? OBS[id][d] : null;
-    // 日报预报浓度：REPORTS[基准日].risk 为表2（预报日 = 基准日+1..+3），compare 为表3（含基准日当日预报）
-    // 返回 {has:是否在日报中出现, v:预报值}；v=null 表示日报中该值为「——」（缺测）
+    // 日报预报浓度：REPORTS[基准日].risk 即日报表2，预报日 = 基准日+1..+3，与 RSI 同起点
+    // v=null 表示日报中该值为「——」（缺测）
     function dailyForecast(sid,date){
       const rep=REPORTS[state.base];
-      if(!rep)return {has:false,v:null};
+      if(!rep)return null;
       const r=(rep.risk||[]).find(x=>x.station===sid&&x.date===date);
-      if(r)return {has:true,v:r.conc==null?null:num(r.conc)};
-      const c=(rep.compare||[]).find(x=>x.station===sid&&x.date===date);
-      if(c)return {has:true,v:c.report_pred==null?null:num(c.report_pred)};
-      return {has:false,v:null};
+      return r?(r.conc==null?null:num(r.conc)):null;
     }
+    // 基准日当日的日报预报（日报表3），仅作 tooltip 参考，不参与折线
+    const dailyBase = sid => {const rep=REPORTS[state.base];if(!rep)return null;
+      const c=(rep.compare||[]).find(x=>x.station===sid&&x.date===state.base);return c?num(c.report_pred):null;};
     function actualOf(id,h){const f=forecast(id,h);return f&&f.actual!=null?f.actual:obsAt(id,addDays(state.base,h));}
     function addDays(iso,n){const d=new Date(iso+'T00:00:00Z');d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);}
     const md = (iso,sep) => iso.slice(5,7)+(sep||'/')+iso.slice(8,10);
@@ -524,10 +524,13 @@
       $('stationNameHeader').textContent=st.full+(st.river?' / '+st.river:'');
       $('horizonKpi').innerHTML=H+'<small>天</small>';
       $('baseNote').textContent=dotted(state.base);
+      const fidx=6;
       const pts=[];
-      for(let k=-6;k<=0;k++){const d=addDays(state.base,k);pts.push({date:d,k,v:obsAt(id,d),doc:k===0?dailyForecast(id,d).v:null});}
-      for(let h=1;h<=H;h++){const f=forecast(id,h);pts.push({date:addDays(state.base,h),k:h,v:f?f.point:null,lo:f?f.q10:null,hi:f?f.q90:null,act:actualOf(id,h),doc:dailyForecast(id,addDays(state.base,h)).v});}
-      const fidx=6,total=pts.length,W=640,Hh=282,pad={l:44,r:13,t:24,b:38},x0=pad.l,x1=W-pad.r,y0=pad.t,y1=Hh-pad.b;
+      for(let k=-6;k<=0;k++){const d=addDays(state.base,k);pts.push({date:d,k,v:obsAt(id,d),doc:null});}
+      // 基准日：日报预测线与 RSI 线同样以基准日实测值为起点，保证两条预测线在同一实测点相接
+      pts[fidx].doc=obsAt(id,state.base);
+      for(let h=1;h<=H;h++){const f=forecast(id,h);pts.push({date:addDays(state.base,h),k:h,v:f?f.point:null,lo:f?f.q10:null,hi:f?f.q90:null,act:actualOf(id,h),doc:dailyForecast(id,addDays(state.base,h))});}
+      const total=pts.length,W=640,Hh=282,pad={l:44,r:13,t:24,b:38},x0=pad.l,x1=W-pad.r,y0=pad.t,y1=Hh-pad.b;
       const all=[THRESHOLD*1.2];pts.forEach(p=>[p.v,p.hi,p.act,p.doc].forEach(v=>{if(v!=null)all.push(v);}));
       const vmax=Math.max(...all),step=[1,2,5,10,20,50,100].find(s=>vmax/s<=5)||200,ymax=Math.ceil(vmax/step)*step;
       const nx=i=>x0+i*(x1-x0)/(total-1),ny=v=>y1-v/ymax*(y1-y0);
@@ -545,11 +548,11 @@
       const areaSvg=histRuns.filter(r=>r.length>1).map(r=>`<polygon points="${P([[r[0][0],y1],...r,[r[r.length-1][0],y1]])}" fill="url(#obsArea)"/>`).join('');
       const lineH=histRuns.filter(r=>r.length>1).map(r=>`<polyline points="${P(r)}" fill="none" stroke="#20aa8d" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"/>`).join('');
       const lineF=futRuns.filter(r=>r.length>1).map(r=>`<polyline points="${P(r)}" fill="none" stroke="#3980ea" stroke-width="2.7" stroke-dasharray="6 5" stroke-linecap="round" stroke-linejoin="round"/>`).join('');
-      // 日报原预测（淡紫）：基准日取表3预报值，未来段取表2预报值
+      // 日报原预测（淡紫）：与 RSI 线共用基准日实测起点，未来段取日报表2预报值
       const docRuns=runs(pts.slice(fidx).map((p,j)=>p.doc==null?null:[nx(fidx+j),ny(p.doc)]));
       const lineD=docRuns.filter(r=>r.length>1).map(r=>`<polyline points="${P(r)}" fill="none" stroke="#9b8ad6" stroke-width="2.4" stroke-dasharray="2 4" stroke-linecap="round" stroke-linejoin="round"/>`).join('');
       let docDots='';
-      pts.forEach((p,i)=>{if(p.doc==null||i<fidx)return;
+      pts.forEach((p,i)=>{if(p.doc==null||i<=fidx)return;
         const x=nx(i),y=ny(p.doc),r=3.4;
         docDots+=`<polygon points="${x},${y-r} ${x+r},${y} ${x},${y+r} ${x-r},${y}" fill="#fff" stroke="#9b8ad6" stroke-width="1.9"/>`;});
       let dots='',gaps='';
@@ -585,7 +588,7 @@
             if(p.v!=null)html+='<br>'+(p.lo!=null&&p.hi!=null?'区间 q10–q90：'+fmt(p.lo)+' – '+fmt(p.hi):'H1 为点预测（无区间）');
             html+='<br>日报预测：'+(p.doc==null?'缺失':fmt(p.doc)+' μg/L');
             html+='<br>同期实测：'+(p.act==null?'—':fmt(p.act)+' μg/L');}
-          if(i===fidx&&p.doc!=null)html+=`<br>日报预测：${fmt(p.doc)} μg/L`;
+          if(i===fidx){const db=dailyBase(id);html+=`<br>日报当日预报（表3）：${db==null?'缺失':fmt(db)+' μg/L'}`;}
           tip.innerHTML=html;tip.style.left=Math.max(85,Math.min(rect.width-85,nx(i)/W*rect.width))+'px';tip.style.top=Math.max(60,ny(yv)/Hh*rect.height)+'px';tip.style.display='block';};
         el.addEventListener('mouseenter',show);el.addEventListener('click',show);el.addEventListener('mouseleave',()=>tip.style.display='none');});
     }
@@ -792,7 +795,7 @@
       const s=STATIONS[id],d=state.day,target=addDays(state.base,d),f=forecast(id,d);
       const doc=dailyForecast(id,target);
       const lv=f?`<span class="v sp-risk"><i style="background:${concColor(f.point)}"></i>${concLevel(f.point)}</span>`:'<span class="v">—</span>';
-      const docVal=doc.v==null?'<span class="v v-miss">缺失</span>':`<span class="v v-doc">${fmt(doc.v)} μg/L</span>`;
+      const docVal=doc==null?'<span class="v v-miss">缺失</span>':`<span class="v v-doc">${fmt(doc)} μg/L</span>`;
       const rsiVal=f?`<span class="v v-rsi">${fmt(f.point)} μg/L</span>`:'<span class="v v-miss">该日无 RSI 预测</span>';
       return `<div class="sp-head"><div class="sp-name">${esc(s.full)}</div><div class="sp-sub">${dotted(target)} · 未来 ${d} 天预测 · 日报 + ${modelFor(d)}</div></div><div class="sp-rows">`+
         `<div class="sp-row"><span class="k">日报预测浓度<small>监测预警日报</small></span>${docVal}</div>`+
