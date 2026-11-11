@@ -37,8 +37,10 @@ function Get-DailyMax($id) {
     $date = $t.Substring(0, 10)
     if ($days.ContainsKey($date)) {
       $days[$date].n++
+      $days[$date].sum += $v
       if ($v -gt $days[$date].max) { $days[$date].max = $v }
-    } else { $days[$date] = @{ max = $v; n = 1 } }
+      if ($v -lt $days[$date].min) { $days[$date].min = $v }
+    } else { $days[$date] = @{ max = $v; min = $v; sum = $v; n = 1 } }
   }
   return $days
 }
@@ -72,13 +74,13 @@ foreach ($line in (Read-Md '2026_h3_detailed_comparison.md')) {
 
 New-Item -ItemType Directory -Force $out | Out-Null
 $obs = New-Object System.Collections.Generic.List[string]
-$obs.Add('station_id,date,cyano_ugl_max,n_samples')
+$obs.Add('station_id,date,cyano_ugl_min,cyano_ugl_mean,cyano_ugl_max,n_samples')
 $mismatch = 0
 foreach ($id in $sources.Keys) {
   $days = Get-DailyMax $id
   foreach ($date in ($days.Keys | Sort-Object)) {
     if ($date -lt "$year-08-01" -or $date -gt "$year-09-30") { continue }
-    $obs.Add(('{0},{1},{2},{3}' -f $id, $date, $days[$date].max.ToString('0.000', $inv), $days[$date].n))
+    $obs.Add(('{0},{1},{2},{3},{4},{5}' -f $id, $date, $days[$date].min.ToString('0.000', $inv), ($days[$date].sum / $days[$date].n).ToString('0.000', $inv), $days[$date].max.ToString('0.000', $inv), $days[$date].n))
   }
   foreach ($f in ($forecasts | Where-Object { $_.s -eq $id })) {
     $o = $days[$f.t]
